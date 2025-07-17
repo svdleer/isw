@@ -1,0 +1,30 @@
+# Security - never commit sensitive files
+.env
+.env.local
+.env.production
+
+# Database backups
+*.sql.bak
+*.dump
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Composer (if using)
+vendor/
+composer.lock

@@ -1,0 +1,274 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "ISW CMDB REST API",
+    "description": "A PHP REST API for querying a MySQL CMDB database with support for hostname and IP address searches using API key authentication.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "ISW CMDB API Support",
+      "email": "admin@example.com"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost/isw",
+      "description": "Development server"
+    },
+    {
+      "url": "https://your-domain.com/isw",
+      "description": "Production server"
+    }
+  ],
+  "security": [
+    {
+      "ApiKeyAuth": []
+    }
+  ],
+  "paths": {
+    "/api/search": {
+      "get": {
+        "summary": "Search devices",
+        "description": "Search for devices by hostname or IP address with optional wildcard support",
+        "operationId": "searchDevices",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "query",
+            "required": true,
+            "description": "Type of search to perform",
+            "schema": {
+              "type": "string",
+              "enum": ["hostname", "ip"]
+            },
+            "example": "hostname"
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "description": "Search query string",
+            "schema": {
+              "type": "string"
+            },
+            "examples": {
+              "hostname_exact": {
+                "summary": "Exact hostname search",
+                "value": "GV-RC0011-CCAP003"
+              },
+              "hostname_wildcard": {
+                "summary": "Wildcard hostname search",
+                "value": "CCAP*"
+              },
+              "ip_exact": {
+                "summary": "Exact IP search",
+                "value": "192.168.1.100"
+              },
+              "ip_wildcard": {
+                "summary": "Wildcard IP search",
+                "value": "192.168.1.*"
+              }
+            }
+          },
+          {
+            "name": "api_key",
+            "in": "query",
+            "required": false,
+            "description": "API key for authentication (can also be provided via X-API-Key header)",
+            "schema": {
+              "type": "string"
+            },
+            "example": "dev-key-12345"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "integer",
+                      "example": 200
+                    },
+                    "search_type": {
+                      "type": "string",
+                      "example": "hostname"
+                    },
+                    "query": {
+                      "type": "string",
+                      "example": "CCAP*"
+                    },
+                    "count": {
+                      "type": "integer",
+                      "example": 8
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Device"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "summary": "Health check",
+        "description": "Check the health status of the API",
+        "operationId": "healthCheck",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "API is healthy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "example": "healthy"
+                    },
+                    "timestamp": {
+                      "type": "string",
+                      "format": "date-time",
+                      "example": "2024-07-18 14:30:00"
+                    },
+                    "version": {
+                      "type": "string",
+                      "example": "1.0.0"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "API key for authentication"
+      }
+    },
+    "schemas": {
+      "Device": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "Unique device identifier",
+            "example": 1
+          },
+          "hostname": {
+            "type": "string",
+            "description": "Device hostname",
+            "example": "GV-RC0011-CCAP003"
+          },
+          "ip_address": {
+            "type": "string",
+            "description": "Device IP address",
+            "example": "192.168.1.100"
+          },
+          "description": {
+            "type": "string",
+            "description": "Device description",
+            "example": "CCAP Server 003"
+          },
+          "device_type": {
+            "type": "string",
+            "enum": ["server", "network", "storage", "other"],
+            "description": "Type of device",
+            "example": "server"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["active", "inactive", "maintenance"],
+            "description": "Current device status",
+            "example": "active"
+          },
+          "location": {
+            "type": "string",
+            "description": "Physical location of the device",
+            "example": "Datacenter A"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the device was created",
+            "example": "2024-01-15 10:30:00"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the device was last updated",
+            "example": "2024-01-15 10:30:00"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Error message"
+          },
+          "status": {
+            "type": "integer",
+            "description": "HTTP status code"
+          }
+        },
+        "required": [
+          "error",
+          "status"
+        ]
+      }
+    }
+  }
+}

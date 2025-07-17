@@ -1,0 +1,15 @@
+# Admin directory configuration
+# Deny access to sensitive files
+<Files ".env*">
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Security headers
+Header always set X-Frame-Options DENY
+Header always set X-Content-Type-Options nosniff
+
+# PHP session settings
+php_value session.cookie_httponly 1
+php_value session.cookie_secure 0
+php_value session.use_strict_mode 1

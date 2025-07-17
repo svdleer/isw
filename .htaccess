@@ -1,0 +1,41 @@
+# Deny access to sensitive files
+<Files ".env">
+    Order allow,deny
+    Deny from all
+</Files>
+
+<Files ".env.*">
+    Order allow,deny
+    Deny from all
+</Files>
+
+<Files "*.sql">
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Enable URL rewriting
+RewriteEngine On
+
+# Allow direct access to docs directory
+RewriteCond %{REQUEST_URI} ^/isw/docs/
+RewriteRule ^(.*)$ - [L]
+
+# Allow direct access to admin directory  
+RewriteCond %{REQUEST_URI} ^/isw/admin/
+RewriteRule ^(.*)$ - [L]
+
+# Redirect all other requests to index.php unless the file exists
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.php [QSA,L]
+
+# Security headers
+Header always set X-Content-Type-Options nosniff
+Header always set X-Frame-Options DENY
+Header always set X-XSS-Protection "1; mode=block"
+
+# CORS headers for API
+Header always set Access-Control-Allow-Origin "*"
+Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS"
+Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-API-Key"
