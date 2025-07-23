@@ -35,9 +35,25 @@ class Database {
      */
     public function query($sql, $params = []) {
         try {
-            // Log the query for debugging (without sensitive params)
+            // Format the query for debugging by replacing ? with actual values
             $loggedSql = preg_replace('/\s+/', ' ', trim($sql));
+            
+            // Create a debug version with the actual parameters
+            $debugSql = $sql;
+            if (!empty($params)) {
+                foreach ($params as $param) {
+                    // Replace the first ? with the value
+                    $pos = strpos($debugSql, '?');
+                    if ($pos !== false) {
+                        $value = is_string($param) ? "'" . addslashes($param) . "'" : $param;
+                        $debugSql = substr_replace($debugSql, $value, $pos, 1);
+                    }
+                }
+            }
+            
+            // Log both the parameterized query and the query with values
             error_log("Executing SQL: " . $loggedSql);
+            error_log("SQL with params: " . preg_replace('/\s+/', ' ', trim($debugSql)));
             
             $stmt = $this->connection->prepare($sql);
             
@@ -52,7 +68,9 @@ class Database {
             error_log("Query returned " . count($result) . " rows");
             return $result;
         } catch (PDOException $e) {
-            error_log("Database error: " . $e->getMessage() . " in SQL: " . $loggedSql);
+            $debugSql = $debugSql ?? $loggedSql;
+            error_log("Database error: " . $e->getMessage());
+            error_log("Failed SQL: " . preg_replace('/\s+/', ' ', trim($debugSql)));
             throw new Exception("Query failed: " . $e->getMessage());
         }
     }
