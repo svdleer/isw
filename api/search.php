@@ -377,26 +377,24 @@ try {
                 error_log("ABR/DBR/CBR search pattern: " . $searchPattern);
                 error_log("Original escapedSearchQuery: " . $escapedSearchQuery);
                 
-                // Exact format from user example, but handle wildcards properly and include ip_address
-                $sql = "SELECT UPPER(a.hostname) as hostname, a.loopbackip as ip_address FROM access.devicesnew a LEFT JOIN reporting.acc_alias b ON a.hostname = b.ccap_name WHERE (a.hostname LIKE '$searchPattern' OR b.alias LIKE '$searchPattern') AND a.active = 1 ORDER BY a.hostname";
+                // Exact format from user example, but handle wildcards properly
+                $sql = "SELECT UPPER(a.hostname) as hostname FROM access.devicesnew a LEFT JOIN reporting.acc_alias b ON a.hostname = b.ccap_name WHERE (a.hostname LIKE '$searchPattern' OR b.alias LIKE '$searchPattern') AND a.active = 1 ORDER BY a.hostname";
                        
                 // Log what we expect to see in the database
                 error_log("Looking for ABR/DBR/CBR entries with hostname or alias matching: '$searchPattern'");
             }
             // Optimize queries for common *CCAP* case
             else if ($isAllCcapSearch) {
-                // Use a more efficient query when looking for all CCAP devices - include IP address
+                // Use a more efficient query when looking for all CCAP devices
                 $sql = "SELECT 
-                       UPPER(hostname) as hostname,
-                       loopbackip as ip_address
+                       UPPER(hostname) as hostname
                        FROM access.devicesnew 
                        WHERE hostname LIKE '%CCAP%'
                        AND active = 1
                        ORDER BY hostname";
             } else {
                 $sql = "SELECT 
-                       UPPER(a.hostname) as hostname,
-                       a.loopbackip as ip_address
+                       UPPER(a.hostname) as hostname
                        FROM access.devicesnew a 
                        LEFT JOIN reporting.acc_alias b ON a.hostname = b.ccap_name
                        WHERE (a.hostname LIKE '$escapedSearchQuery' OR b.alias LIKE '$escapedSearchQuery')
@@ -433,7 +431,7 @@ try {
                 }
             }
             
-            // Process each device from the database first without Netshot to avoid delay
+            // Process each device and ensure we get IP addresses from Netshot
             $results = [];
             
             // For *CCAP* queries that might return many results, limit Netshot processing to improve performance
@@ -441,16 +439,17 @@ try {
             $maxNetshotLookups = 50; // Limit how many devices we'll look up in Netshot for large result sets
             $processedNetshot = 0;
             
+            error_log("Processing " . count($dbResults) . " devices from database results - will get IP addresses from Netshot");
+            
             // First process all database results with empty IP addresses
             foreach ($dbResults as $device) {
-                $hostname = $device['hostname'];
+                $hostname = strtoupper($device['hostname']);
                 
-                // Try to find IP from device entry if it exists
+                // Always initialize with empty IP address - will be populated later from Netshot
                 $ipAddress = '';
-                if (isset($device['ip_address'])) {
-                    $ipAddress = $device['ip_address'];
-                    error_log("Using IP address from database record: " . $ipAddress);
-                }
+                
+                // Log that we'll be looking up IP from Netshot later
+                error_log("Added hostname: " . $hostname . " to results (IP will be looked up from Netshot)");
                 
                 $results[] = [
                     'hostname' => $hostname, 
@@ -529,14 +528,17 @@ try {
                         foreach ($results as $key => $result) {
                             if (strtoupper($result['hostname']) === strtoupper($hostname)) {
                                 $results[$key]['ip_address'] = $ipAddress;
+                                // Store the uppercase hostname to ensure consistency
+                                $results[$key]['hostname'] = strtoupper($hostname);
                                 $results[$key]['netshot'] = [
                                     'id' => $netshotDevice['id'] ?? null,
-                                    'name' => $netshotDevice['name'] ?? null,
+                                    'name' => strtoupper($netshotDevice['name'] ?? ''),
                                     'ip' => $ipAddress,
                                     'model' => $netshotDevice['family'] ?? null,
                                     'vendor' => $netshotDevice['domain'] ?? null,
                                     'status' => $netshotDevice['status'] ?? null
                                 ];
+                                error_log("Updated hostname " . $hostname . " with IP from Netshot: " . $ipAddress);
                                 break;
                             }
                         }
@@ -581,14 +583,17 @@ try {
                                 foreach ($results as $key => $result) {
                                     if (strtoupper($result['hostname']) === strtoupper($hostname)) {
                                         $results[$key]['ip_address'] = $ipAddress;
+                                        // Store the uppercase hostname to ensure consistency
+                                        $results[$key]['hostname'] = strtoupper($hostname);
                                         $results[$key]['netshot'] = [
                                             'id' => $potentialMatch['id'] ?? null,
-                                            'name' => $potentialMatch['name'] ?? null,
+                                            'name' => strtoupper($potentialMatch['name'] ?? ''),
                                             'ip' => $ipAddress,
                                             'model' => $potentialMatch['family'] ?? null,
                                             'vendor' => $potentialMatch['domain'] ?? null,
                                             'status' => $potentialMatch['status'] ?? null
                                         ];
+                                        error_log("Updated hostname " . $hostname . " with IP from Netshot alias match: " . $ipAddress);
                                         break;
                                     }
                                 }
@@ -824,6 +829,15 @@ try {
     // Log the entire results array for debugging
     error_log("Search results: " . json_encode($results));
     
+    // Check if we have any results with IP addresses
+    $resultsWithIp = 0;
+    foreach ($results as $result) {
+        if (!empty($result['ip_address'])) {
+            $resultsWithIp++;
+        }
+    }
+    error_log("RESULTS SUMMARY: Total results: " . count($results) . ", Results with IP addresses: " . $resultsWithIp);
+    
     // Process all search results
     $processedResults = [];
     $uniqueHostnames = []; // Track unique hostnames to avoid duplicates
@@ -843,6 +857,8 @@ try {
             }
             $uniqueHostnames[] = $hostname;
             
+            error_log("Processing result for response: Hostname=" . $hostname);
+            
             // Check if IP address is a complex object and extract just the IP string if needed
             if (isset($result['ip_address'])) {
                 if (is_array($result['ip_address']) && isset($result['ip_address']['ip'])) {
@@ -859,13 +875,16 @@ try {
                 $ipAddress = $ipAddress['ip'];
             }
             
-            // Add the processed result with uppercase hostname
+            // Always convert hostname to uppercase for final response
+            $uppercaseHostname = strtoupper($hostname);
+            
+            // Add the processed result with guaranteed uppercase hostname
             $processedResults[] = [
-                'HostName' => strtoupper($hostname),
+                'HostName' => $uppercaseHostname,
                 'IPAddress' => $ipAddress
             ];
             
-            error_log("Processed result: Hostname=" . $hostname . ", IP=" . $ipAddress);
+            error_log("FINAL RESULT: Hostname=" . $uppercaseHostname . ", IP=" . $ipAddress);
         }
     } else {
         error_log("No search results found for: type=" . $searchType . ", query=" . $query);
