@@ -531,27 +531,41 @@ try {
     // Log the entire results array for debugging
     error_log("Search results: " . json_encode($results));
     
-    // Get the actual search results if available
-    $hostname = '';
-    $ipAddress = '';
+    // Process all search results
+    $processedResults = [];
     
     if (!empty($results)) {
-        $firstResult = $results[0];
-        $hostname = strtolower($firstResult['hostname'] ?? '');
+        error_log("Found " . count($results) . " results for query: " . $query);
         
-        // Check if IP address is a complex object and extract just the IP string if needed
-        if (isset($firstResult['ip_address'])) {
-            if (is_array($firstResult['ip_address']) && isset($firstResult['ip_address']['ip'])) {
-                // Extract just the IP string from the complex object
-                $ipAddress = $firstResult['ip_address']['ip'];
-                error_log("Found complex IP object, extracting IP value: " . $ipAddress);
-            } else {
-                $ipAddress = $firstResult['ip_address'];
+        // Process each result to ensure proper format
+        foreach ($results as $result) {
+            $hostname = strtolower($result['hostname'] ?? '');
+            $ipAddress = '';
+            
+            // Check if IP address is a complex object and extract just the IP string if needed
+            if (isset($result['ip_address'])) {
+                if (is_array($result['ip_address']) && isset($result['ip_address']['ip'])) {
+                    // Extract just the IP string from the complex object
+                    $ipAddress = $result['ip_address']['ip'];
+                    error_log("Found complex IP object, extracting IP value: " . $ipAddress);
+                } else {
+                    $ipAddress = $result['ip_address'];
+                }
             }
+            
+            // Final check to ensure IPAddress is always a simple string
+            if (is_array($ipAddress) && isset($ipAddress['ip'])) {
+                $ipAddress = $ipAddress['ip'];
+            }
+            
+            // Add the processed result
+            $processedResults[] = [
+                'HostName' => $hostname,
+                'IPAddress' => $ipAddress
+            ];
+            
+            error_log("Processed result: Hostname=" . $hostname . ", IP=" . $ipAddress);
         }
-        
-        // Log the actual search results
-        error_log("Found results: Hostname=" . $hostname . ", IP=" . $ipAddress);
     } else {
         error_log("No search results found for: type=" . $searchType . ", query=" . $query);
         // Set 404 status for no results
@@ -574,28 +588,30 @@ try {
         error_log("Using client's SourceContext: " . json_encode($data['Header']['SourceContext']));
     }
     
-    // If no results found, set empty values and log this clearly
-    if (empty($hostname) && empty($ipAddress)) {
+    // If no results found, log this clearly
+    if (empty($processedResults)) {
         error_log("IMPORTANT: No results found for search query: " . $query);
-        $hostname = '';
-        $ipAddress = '';
     } else {
-        error_log("Using actual search results for response");
+        error_log("Using actual search results for response: " . count($processedResults) . " items");
     }
     
-    // Final check to ensure IPAddress is always a simple string
-    if (is_array($ipAddress) && isset($ipAddress['ip'])) {
-        $ipAddress = $ipAddress['ip'];
-        error_log("Converted complex IP object to string in final response: " . $ipAddress);
+    // Structure the response based on number of results
+    if (count($processedResults) == 1) {
+        // For single result, use the original simple format
+        $responseData = [
+            'Header' => $sourceHeader,
+            'Body' => $processedResults[0]
+        ];
+    } else {
+        // For multiple results, use array format
+        $responseData = [
+            'Header' => $sourceHeader,
+            'Body' => [
+                'Count' => count($processedResults),
+                'Results' => $processedResults
+            ]
+        ];
     }
-    
-    $responseData = [
-        'Header' => $sourceHeader,
-        'Body' => [
-            'HostName' => $hostname,
-            'IPAddress' => $ipAddress
-        ]
-    ];
     
     echo json_encode($responseData);
     
