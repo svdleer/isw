@@ -201,7 +201,12 @@ class NetshotAPI {
             $regexPattern = $this->patternToRegex($ipPattern);
             $devices = $this->getDevicesInGroup();
             
-            error_log("Searching devices with IP pattern: " . $ipPattern . " (regex: " . $regexPattern . ")");
+            // Filter devices to only include INPRODUCTION status
+            $devices = array_filter($devices, function($device) {
+                return isset($device['status']) && $device['status'] === 'INPRODUCTION';
+            });
+            
+            error_log("Searching " . count($devices) . " INPRODUCTION devices with IP pattern: " . $ipPattern . " (regex: " . $regexPattern . ")");
             
             // Filter devices by IP
             $results = [];
@@ -213,7 +218,7 @@ class NetshotAPI {
                 if (preg_match($regexPattern, $device['mgmtIp'])) {
                     $results[] = [
                         'id' => $device['id'] ?? null,
-                        'name' => $device['name'] ?? null,
+                        'name' => strtoupper($device['name'] ?? ''),
                         'ip' => $device['mgmtIp'] ?? '',
                         'model' => $device['family'] ?? null,
                         'vendor' => $device['domain'] ?? null,
@@ -234,13 +239,32 @@ class NetshotAPI {
      * Get device details by hostname
      * 
      * @param string $hostname The hostname to search for
-     * @return array|null Device details or null if not found
+     * @param bool $validateFormat Whether to validate the hostname format (default true)
+     * @return array|null|false Device details, null if not found, false if invalid format
      */
-    public function getDeviceByHostname($hostname) {
+    public function getDeviceByHostname($hostname, $validateFormat = true) {
         try {
+            // Validate hostname format if required
+            if ($validateFormat) {
+                // Compliant hostname regex: 2-4 letters, followed by -RC or -LC, followed by 0 and 3 digits, followed by -CCAP and digit 1-6 followed by 0 and another digit
+                $hostnamePattern = '/^[a-zA-Z]{2,4}-(RC|LC)0\d{3}-CCAP[1-6]0[0-9]$/i';
+                if (!preg_match($hostnamePattern, $hostname)) {
+                    error_log("Invalid hostname format: " . $hostname . " - must match pattern: " . $hostnamePattern);
+                    return false;
+                }
+            }
+            
+            // Convert hostname to uppercase for consistency
+            $hostname = strtoupper($hostname);
             
             $devices = $this->getDevicesInGroup();
-            error_log("Searching " . count($devices) . " Netshot devices for hostname: " . $hostname);
+            
+            // Filter devices to only include INPRODUCTION status
+            $devices = array_filter($devices, function($device) {
+                return isset($device['status']) && $device['status'] === 'INPRODUCTION';
+            });
+            
+            error_log("Searching " . count($devices) . " Netshot INPRODUCTION devices for hostname: " . $hostname);
             
             // Log a sample device to see the structure
             if (!empty($devices)) {
@@ -260,9 +284,7 @@ class NetshotAPI {
             foreach ($devices as $device) {
                 // Try a few different case variations to handle case sensitivity
                 if (isset($device['name']) && 
-                    (strtoupper($device['name']) === strtoupper($hostname) ||  // Full uppercase comparison
-                     $device['name'] === $hostname ||                          // Exact case comparison
-                     strtolower($device['name']) === strtolower($hostname))    // Full lowercase comparison
+                    (strtoupper($device['name']) === $hostname)    // Now hostname is already uppercase
                    ) {
                     error_log("Found exact hostname match in Netshot: " . $device['name']);
                     
@@ -287,7 +309,8 @@ class NetshotAPI {
                 }
                 
                 $deviceName = strtoupper($device['name']);
-                $searchName = strtoupper($hostname);
+                // $hostname is already uppercase from above
+                $searchName = $hostname;
                 
                 // Check if one contains the other, or if there's a match after stripping non-alphanumeric chars
                 $cleanDeviceName = preg_replace('/[^A-Z0-9]/', '', $deviceName);
@@ -355,12 +378,19 @@ class NetshotAPI {
             error_log("Fetching devices from Netshot for IP lookup: " . $ipAddress);
             $devices = $this->getDevicesInGroup();
             
+            // Filter devices to only include INPRODUCTION status
+            $devices = array_filter($devices, function($device) {
+                return isset($device['status']) && $device['status'] === 'INPRODUCTION';
+            });
+            
+            error_log("Filtered to " . count($devices) . " INPRODUCTION devices for IP lookup");
+            
             foreach ($devices as $device) {
                 if (isset($device['mgmtIp']) && $device['mgmtIp'] === $ipAddress) {
-                    // Format the response consistently
+                    // Format the response consistently and ensure hostname is uppercase
                     $result = [
                         'id' => $device['id'] ?? null,
-                        'name' => $device['name'] ?? null,
+                        'name' => strtoupper($device['name'] ?? ''),
                         'ip' => $device['mgmtIp'] ?? $ipAddress,
                         'model' => $device['family'] ?? null,
                         'vendor' => $device['domain'] ?? null,
@@ -392,12 +422,19 @@ class NetshotAPI {
             
             error_log("Looking up hostnames for IP: " . $ipAddress);
             $devices = $this->getDevicesInGroup();
+            
+            // Filter devices to only include INPRODUCTION status
+            $devices = array_filter($devices, function($device) {
+                return isset($device['status']) && $device['status'] === 'INPRODUCTION';
+            });
+            
+            error_log("Filtered to " . count($devices) . " INPRODUCTION devices for hostname lookup");
             $hostnames = [];
             
             foreach ($devices as $device) {
                 if (isset($device['mgmtIp']) && $device['mgmtIp'] === $ipAddress) {
                     if (isset($device['name']) && !empty($device['name'])) {
-                        $hostnames[] = $device['name'];
+                        $hostnames[] = strtoupper($device['name']);
                     }
                 }
             }
@@ -420,9 +457,11 @@ class NetshotAPI {
             return $dbDevice;
         }
         
-        $netshotDevice = $this->getDeviceByHostname($dbDevice['hostname']);
+        // Set validateFormat to false to maintain backward compatibility
+        $netshotDevice = $this->getDeviceByHostname($dbDevice['hostname'], false);
         
-        if (!$netshotDevice) {
+        // Handle both null (not found) and false (invalid format)
+        if ($netshotDevice === null || $netshotDevice === false) {
             return $dbDevice;
         }
         
