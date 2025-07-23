@@ -291,8 +291,14 @@ try {
             }
             
             // Prepare query for database
-            $searchQuery = $auth->prepareHostnameQuery($query);
-            error_log("After prepareHostnameQuery: " . $searchQuery);
+            // Skip prepareHostnameQuery for ABR/DBR/CBR format to avoid adding CCAP
+            if ($isAbrFormat) {
+                $searchQuery = str_replace('*', '%', $query);
+                error_log("ABR/DBR/CBR format detected - skipping prepareHostnameQuery to avoid adding CCAP");
+            } else {
+                $searchQuery = $auth->prepareHostnameQuery($query);
+                error_log("After prepareHostnameQuery: " . $searchQuery);
+            }
             
             // Special case: if only wildcard is submitted or query is just '*' or '%', search for all CCAP devices
             if ($searchQuery === '%' || $searchQuery === '*' || $query === '*' || $query === '%') {
@@ -303,6 +309,8 @@ try {
             // For ABR/DBR/CBR format, don't force CCAP in the search criteria
             if ($isAbrFormat) {
                 error_log("ABR/DBR/CBR format detected - not adding CCAP to search query");
+                // For ABR format, ensure we're using the original query as-is without any modifications
+                $searchQuery = $originalQuery;
             }
             // For normal searches, always make sure CCAP is part of the search criteria
             else if (stripos($searchQuery, 'CCAP') === false) {
@@ -329,16 +337,11 @@ try {
             // Special case for ABR/DBR/CBR format
             if ($isAbrFormat) {
                 error_log("Using ABR/DBR/CBR optimized query for: " . $escapedOriginalQuery);
-                $sql = "SELECT 
-                       UPPER(a.hostname) as hostname
-                       FROM access.devicesnew a 
-                       JOIN reporting.acc_alias b ON a.hostname = b.ccap_name
-                       WHERE b.alias = '$escapedOriginalQuery'
-                       AND a.active = 1
-                       ORDER BY a.hostname";
+                // Exact format from user example
+                $sql = "SELECT UPPER(a.hostname) as hostname FROM access.devicesnew a LEFT JOIN reporting.acc_alias b ON a.hostname = b.ccap_name WHERE (a.hostname LIKE '%$escapedOriginalQuery%' OR b.alias LIKE '%$escapedOriginalQuery%') AND a.active = 1 ORDER BY a.hostname";
                        
                 // Log what we expect to see in the database
-                error_log("Looking for alias entry where alias = '$escapedOriginalQuery' and mapped to a CCAP device");
+                error_log("Looking for ABR/DBR/CBR entries with hostname or alias containing: '$escapedOriginalQuery'");
             }
             // Optimize queries for common *CCAP* case
             else if ($isAllCcapSearch) {
