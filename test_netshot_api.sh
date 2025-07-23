@@ -83,7 +83,7 @@ curl -s -u "$AUTH_USER:$AUTH_PASS" \
 
 # Test 4: Test with a hostname search to compare with IP search
 echo -e "\n4. Testing hostname search for comparison..."
-HOSTNAME_TO_TEST="GV-RC0011-CCAP003"  # Replace with a real hostname in your database
+HOSTNAME_TO_TEST="GV-RC0052-CCAP002"  # Use hostname from error log that should exist in Netshot
 api_call "/api/search" "?type=hostname&q=$HOSTNAME_TO_TEST" | jq '.'
 
 echo -e "\n=== Netshot Integration Test Completed ==="

@@ -54,8 +54,9 @@ class NetshotAPI {
             curl_setopt($ch, CURLOPT_URL, $url);
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
             curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                'X-Netshot-API-Key: ' . $this->apiKey,
-                'Accept: application/json'
+                'X-Netshot-API-Token: ' . $this->apiKey,
+                'Accept: application/json',
+                'Content-Type: application/json'
             ]);
             // Skip SSL verification in development (remove this in production)
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
