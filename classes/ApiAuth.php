@@ -124,6 +124,17 @@ class ApiAuth {
             return true;
         }
         
+        // Check for ABR/DBR/CBR pattern in wildcards - e.g. *ABR* or AD00CBR*
+        if (strpos($hostname, '*') !== false || strpos($hostname, '%') !== false) {
+            // Check if the wildcard search contains ABR, DBR, or CBR
+            if (stripos($hostname, 'abr') !== false || 
+                stripos($hostname, 'dbr') !== false || 
+                stripos($hostname, 'cbr') !== false) {
+                error_log("Accepting ABR/DBR/CBR wildcard format hostname: " . $hostname);
+                return true;
+            }
+        }
+        
         // Check for ABR/DBR/CBR pattern - now accepting these formats
         $abrPattern = '/^[a-zA-Z]{2}\d{2}(abr|dbr|cbr)\d{1,4}$/i';
         if (preg_match($abrPattern, $hostname)) {
