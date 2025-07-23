@@ -308,7 +308,7 @@ try {
             // Updated SQL query based on actual database structure
             // Not using loopbackip since it's not useful
             $sql = "SELECT 
-                   a.hostname
+                   UPPER(a.hostname) as hostname
                    FROM access.devicesnew a 
                    LEFT JOIN reporting.acc_alias b ON a.hostname = b.ccap_name
                    WHERE (a.hostname LIKE ? OR b.alias LIKE ?)
@@ -629,23 +629,7 @@ try {
         error_log("Using actual search results for response: " . count($processedResults) . " items");
     }
     
-    // Let's add a test result if none were found
-    if (count($processedResults) === 0) {
-        // For testing purposes, add a fake entry if there are no results
-        $testResults = [
-            [
-                'HostName' => 'gv-rc0052-ccap001',
-                'IPAddress' => '172.16.55.25'
-            ],
-            [
-                'HostName' => 'gv-rc0052-ccap002',
-                'IPAddress' => '172.16.55.26'
-            ]
-        ];
-        
-        error_log("No results found, adding test data for troubleshooting");
-        $processedResults = $testResults;
-    }
+    // No more static test data - return empty results if nothing found
     
     // Structure the response based on number of results
     if (count($processedResults) == 1) {
