@@ -7,14 +7,45 @@
 BASE_URL="${BASE_URL:-http://localhost/isw}"
 AUTH_USER="isw"
 AUTH_PASS="Spyem_OtGheb4"
+NETSHOT_URL="${NETSHOT_URL:-https://netshot.oss.local/api}"
+
+# Process command line arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --base-url=*)
+      BASE_URL="${1#*=}"
+      shift
+      ;;
+    --auth-user=*)
+      AUTH_USER="${1#*=}"
+      shift
+      ;;
+    --auth-pass=*)
+      AUTH_PASS="${1#*=}"
+      shift
+      ;;
+    --netshot-url=*)
+      NETSHOT_URL="${1#*=}"
+      shift
+      ;;
+    *)
+      echo "Unknown option: $1"
+      echo "Usage: $0 [--base-url=URL] [--auth-user=USER] [--auth-pass=PASS] [--netshot-url=URL]"
+      exit 1
+      ;;
+  esac
+done
 
 echo "=== ISW CMDB API - Netshot Integration Test ==="
 echo "Base URL: $BASE_URL"
+echo "Authentication: $AUTH_USER:$AUTH_PASS"
+echo "Netshot URL: $NETSHOT_URL"
 
 # Function to make an authenticated API call
 api_call() {
     local endpoint=$1
     local query=$2
+    echo -e "\n> Calling: $BASE_URL$endpoint$query"
     curl -s -u "$AUTH_USER:$AUTH_PASS" "$BASE_URL$endpoint$query"
 }
 

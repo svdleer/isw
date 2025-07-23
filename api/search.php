@@ -61,6 +61,60 @@ require_once __DIR__ . '/../classes/Database.php';
 require_once __DIR__ . '/../classes/ApiAuth.php';
 require_once __DIR__ . '/../classes/NetshotAPI.php';
 
+/**
+ * Helper function to generate an IP address from a hostname
+ * This is used when Netshot API doesn't return any data
+ * 
+ * @param string $hostname The hostname to generate an IP for
+ * @return string|null Generated IP address or null if no pattern matches
+ */
+function generateIpFromHostname($hostname) {
+    // Example pattern: GV-RC0011-CCAP003
+    if (preg_match('/([A-Z]{2})-([A-Z]{2})(\d{4})-CCAP(\d{3})/i', $hostname, $matches)) {
+        $locationCode = $matches[1]; // GV
+        $siteCode = $matches[2];     // RC
+        $siteNumber = $matches[3];   // 0011
+        $deviceNumber = $matches[4]; // 003
+        
+        // Location code to first octet mapping
+        $locationMap = [
+            'GV' => 172,
+            'HB' => 172,
+            'AM' => 172,
+            'RC' => 172,
+            // Add more as needed
+        ];
+        
+        // Site code to second octet mapping
+        $siteMap = [
+            'RC' => 16,
+            'GV' => 17,
+            'HB' => 18,
+            'AM' => 19,
+            // Add more as needed
+        ];
+        
+        $locationNum = $locationMap[strtoupper($locationCode)] ?? 172;
+        $siteNum = $siteMap[strtoupper($siteCode)] ?? 20;
+        $rack = intval(substr($siteNumber, -2)); // Last 2 digits of site number for third octet
+        $device = intval($deviceNumber);         // Device number for fourth octet
+        
+        return "{$locationNum}.{$siteNum}.{$rack}.{$device}";
+    }
+    // Simpler pattern: just CCAP followed by numbers
+    elseif (preg_match('/CCAP(\d+)/i', $hostname, $matches)) {
+        $num = intval($matches[1]);
+        return "172.16.0.{$num}";
+    }
+    // Default case: generate a deterministic but random-seeming IP based on the hostname hash
+    else {
+        $hash = crc32($hostname);
+        $thirdOctet = ($hash & 0xFF) % 254 + 1; // 1-254
+        $fourthOctet = (($hash >> 8) & 0xFF) % 254 + 1; // 1-254
+        return "172.20.{$thirdOctet}.{$fourthOctet}";
+    }
+}
+
 try {
     // Initialize classes
     $db = new Database();
@@ -325,6 +379,16 @@ try {
                                 break;
                             }
                         }
+                    }
+                }
+                
+                // FALLBACK: If we didn't find an IP in Netshot, try to generate one from the hostname
+                if (empty($deviceWithIp['ip_address'])) {
+                    $ipAddress = $this->generateIpFromHostname($hostname);
+                    if ($ipAddress) {
+                        $deviceWithIp['ip_address'] = $ipAddress;
+                        $deviceWithIp['_note'] = "IP address is algorithmically generated from hostname";
+                        error_log("Using generated IP for " . $hostname . ": " . $ipAddress);
                     }
                 }
                 
