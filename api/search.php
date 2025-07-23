@@ -233,13 +233,10 @@ try {
             $searchQuery = str_replace('*', '%', $searchQuery);
             
             // Query that gets only active devices - using only hostname/alias fields
-            // Removed description field as it's not needed
+            // Only selecting hostname and adding empty ip_address field
             $sql = "SELECT 
                    a.hostname, 
-                   '' as ip_address, 
-                   a.created_at, 
-                   a.updated_at, 
-                   a.location
+                   '' as ip_address
                    FROM access.devicesnew a 
                    LEFT JOIN reporting.acc_alias b ON UPPER(a.hostname) = UPPER(b.ccap_name)
                    WHERE (UPPER(a.hostname) LIKE UPPER(?) OR UPPER(COALESCE(b.alias, '')) LIKE UPPER(?))
@@ -302,10 +299,7 @@ try {
                                 // For each hostname found, do a hostname search in our database
                                 $sql = "SELECT 
                                        a.hostname, 
-                                       '' as ip_address, 
-                                       a.created_at, 
-                                       a.updated_at, 
-                                       a.location
+                                       '' as ip_address
                                        FROM access.devicesnew a 
                                        WHERE UPPER(a.hostname) = UPPER(?)
                                        AND a.active = 1";
