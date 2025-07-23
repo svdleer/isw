@@ -86,4 +86,23 @@ echo -e "\n4. Testing hostname search for comparison..."
 HOSTNAME_TO_TEST="GV-RC0052-CCAP002"  # Use hostname from error log that should exist in Netshot
 api_call "/api/search" "?type=hostname&q=$HOSTNAME_TO_TEST" | jq '.'
 
+# Test 5: Directly test Netshot API connection with the token
+echo -e "\n5. Testing direct Netshot API connection..."
+echo "Connecting directly to: $NETSHOT_URL"
+
+# Check if jq is installed
+if command -v jq >/dev/null 2>&1; then
+  # Use the NETSHOT_URL and export it for the PHP test script
+  export NETSHOT_URL
+  # Run the PHP test script if it exists
+  if [ -f "test_netshot_connection.php" ]; then
+    echo "Running Netshot connection test script..."
+    php test_netshot_connection.php
+  else
+    echo "Netshot test script not found. Skipping direct API test."
+  fi
+else
+  echo "jq is not installed. Skipping JSON formatting for direct API test."
+fi
+
 echo -e "\n=== Netshot Integration Test Completed ==="

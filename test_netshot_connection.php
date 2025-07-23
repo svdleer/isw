@@ -10,6 +10,19 @@
 require_once __DIR__ . '/classes/EnvLoader.php';
 require_once __DIR__ . '/classes/NetshotAPI.php';
 
+// Load environment variables
+EnvLoader::load();
+
+// Get Netshot URL and API key from command line arguments or environment variables
+$apiUrl = $_ENV['NETSHOT_URL'] ?? $_ENV['NETSHOT_API_URL'] ?? $_ENV['NETSHOT_OSS_URL'] ?? 'https://netshot.oss.local/api';
+
+// Use the server URL from your code snippet if environment variables aren't set
+if ($apiUrl == 'https://netshot.oss.local/api' && !isset($_ENV['NETSHOT_URL'])) {
+    $apiUrl = 'https://netshot.oss.local'; // Remove /api as it might be added in the test
+}
+
+$apiKey = $_ENV['NETSHOT_API_KEY'] ?? $_ENV['NETSHOT_API_TOKEN'] ?? $_ENV['NETSHOT_OSS_TOKEN'] ?? 'UqRf6NkgvKru3rxRRrRKck1VoANQJvP2';
+
 // Create a function to test different Netshot API URLs
 function testNetshotConnection($url, $apiKey) {
     echo "Testing Netshot API connection to: $url\n";
@@ -25,8 +38,9 @@ function testNetshotConnection($url, $apiKey) {
         curl_setopt($ch, CURLOPT_URL, $testEndpoint);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'X-Netshot-API-Key: ' . $apiKey,
-            'Accept: application/json'
+            'X-Netshot-API-Token: ' . $apiKey,
+            'Accept: application/json',
+            'Content-Type: application/json'
         ]);
         
         // Skip SSL verification for testing only
@@ -67,12 +81,12 @@ function testNetshotConnection($url, $apiKey) {
     }
 }
 
-// Load environment variables
-EnvLoader::load();
+// Use the variables defined at the top of the file
+$configuredUrl = $apiUrl;
+$configuredKey = $apiKey;
 
-// Get the configured Netshot API URL and key
-$configuredUrl = $_ENV['NETSHOT_API_URL'] ?? 'https://netshot.oss.local/api';
-$configuredKey = $_ENV['NETSHOT_API_KEY'] ?? 'UqRf6NkgvKru3rxRRrRKck1VoANQJvP2';
+// Try to add specific group parameter like in your Python code
+$groupParam = isset($_ENV['NETSHOT_GROUP']) ? $_ENV['NETSHOT_GROUP'] : 'ACCESS';
 
 echo "=== Netshot API Connection Test ===\n";
 

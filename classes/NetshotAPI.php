@@ -22,9 +22,17 @@ class NetshotAPI {
         require_once __DIR__ . '/EnvLoader.php';
         EnvLoader::load();
         
-        // Use provided values or fall back to environment variables
-        $this->apiUrl = $apiUrl ?: $_ENV['NETSHOT_API_URL'] ?? 'https://netshot.oss.local/api';
-        $this->apiKey = $apiKey ?: $_ENV['NETSHOT_API_KEY'] ?? 'UqRf6NkgvKru3rxRRrRKck1VoANQJvP2';
+        // Use provided values or fall back to environment variables with multiple possible names
+        $this->apiUrl = $apiUrl ?: 
+            $_ENV['NETSHOT_API_URL'] ?? 
+            $_ENV['NETSHOT_OSS_URL'] ?? 
+            'https://netshot.oss.local/api';
+            
+        $this->apiKey = $apiKey ?: 
+            $_ENV['NETSHOT_API_KEY'] ?? 
+            $_ENV['NETSHOT_API_TOKEN'] ?? 
+            $_ENV['NETSHOT_OSS_TOKEN'] ?? 
+            'UqRf6NkgvKru3rxRRrRKck1VoANQJvP2';
         
         // Set up cache directory
         $this->cacheDir = __DIR__ . '/../cache/netshot';
