@@ -265,17 +265,24 @@ try {
                 exit();
             }
             
+            // Debug the original query
+            error_log("Original hostname query: " . $query);
+            
             // Prepare query for database
             $searchQuery = $auth->prepareHostnameQuery($query);
+            error_log("After prepareHostnameQuery: " . $searchQuery);
             
             // Special case: if only wildcard is submitted, search for hostnames containing CCAP
             if ($searchQuery === '%' || $searchQuery === '*') {
                 $searchQuery = '%CCAP%';
+                error_log("Single wildcard converted to: " . $searchQuery);
             } 
+            
             // Always make sure CCAP is part of the search criteria
             if (stripos($searchQuery, 'CCAP') === false) {
                 // Force CCAP to be included in all hostname searches
                 $searchQuery = '%CCAP%' . $searchQuery;
+                error_log("Added CCAP to query: " . $searchQuery);
             }
             
             // Always convert to wildcard format for consistency
@@ -299,6 +306,9 @@ try {
             error_log("With parameters: " . json_encode([$searchQuery, $searchQuery]));
             
             $dbResults = $db->query($sql, [$searchQuery, $searchQuery]);
+            
+            // Log the number of results found
+            error_log("Database query returned " . count($dbResults) . " results for hostname search: " . $searchQuery);
             
             // For each hostname found, check Netshot for IP address
             $results = [];
@@ -502,6 +512,9 @@ try {
     // Return successful response
     http_response_code(200);
     
+    // Log the entire results array for debugging
+    error_log("Search results: " . json_encode($results));
+    
     // Get the actual search results if available
     $hostname = '';
     $ipAddress = '';
@@ -515,30 +528,40 @@ try {
         error_log("Found results: Hostname=" . $hostname . ", IP=" . $ipAddress);
     } else {
         error_log("No search results found for: type=" . $searchType . ", query=" . $query);
+        // Set 404 status for no results
+        http_response_code(404);
     }
     
     // Format response data in the requested structure
+    $sourceHeader = $isJsonRequest && isset($data['Header']) ? $data['Header'] : [
+        'BusinessTransactionID' => '1',
+        'SentTimestamp' => '2023-11-10T09:20:00',
+        'SourceContext' => [
+            'host' => 'TestServer',
+            'application' => 'ApiTester'
+        ]
+    ];
+    
+    // Ensure we preserve SourceContext from the client
+    if ($isJsonRequest && isset($data['Header']['SourceContext'])) {
+        // Preserve the client's SourceContext values
+        error_log("Using client's SourceContext: " . json_encode($data['Header']['SourceContext']));
+    }
+    
+    // If no results found, set empty values and log this clearly
+    if (empty($hostname) && empty($ipAddress)) {
+        error_log("IMPORTANT: No results found for search query: " . $query);
+        $hostname = '';
+        $ipAddress = '';
+    } else {
+        error_log("Using actual search results for response");
+    }
+    
     $responseData = [
-        'Header' => $isJsonRequest ? 
-            ($data['Header'] ?? [
-                'BusinessTransactionID' => '1',
-                'SentTimestamp' => '2023-11-10T09:20:00',
-                'SourceContext' => [
-                    'host' => 'TestServer',
-                    'application' => 'ApiTester'
-                ]
-            ]) : 
-            [
-                'BusinessTransactionID' => '1',
-                'SentTimestamp' => '2023-11-10T09:20:00',
-                'SourceContext' => [
-                    'host' => 'TestServer',
-                    'application' => 'ApiTester'
-                ]
-            ],
+        'Header' => $sourceHeader,
         'Body' => [
-            'HostName' => !empty($hostname) ? $hostname : 'gv-rc0052-ccap002',
-            'IPAddress' => !empty($ipAddress) ? $ipAddress : '172.16.55.26'
+            'HostName' => $hostname,
+            'IPAddress' => $ipAddress
         ]
     ];
     
