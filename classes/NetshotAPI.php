@@ -562,11 +562,26 @@ class NetshotAPI {
             return $dbDevice;
         }
         
+        // Check for IP address in various possible field names
+        $ipAddress = null;
+        $possibleIpFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
+        foreach ($possibleIpFields as $field) {
+            if (isset($netshotDevice[$field]) && !empty($netshotDevice[$field])) {
+                $ipAddress = $netshotDevice[$field];
+                break;
+            }
+        }
+        
         // Add Netshot data to device record
         $dbDevice['netshot_id'] = $netshotDevice['id'] ?? null;
         $dbDevice['netshot_status'] = $netshotDevice['status'] ?? null;
         $dbDevice['netshot_family'] = $netshotDevice['family'] ?? null;
         $dbDevice['netshot_software_version'] = $netshotDevice['softwareVersion'] ?? null;
+        
+        // Add IP address if found
+        if ($ipAddress) {
+            $dbDevice['ip_address'] = $ipAddress;
+        }
         
         return $dbDevice;
     }

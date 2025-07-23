@@ -377,24 +377,26 @@ try {
                 error_log("ABR/DBR/CBR search pattern: " . $searchPattern);
                 error_log("Original escapedSearchQuery: " . $escapedSearchQuery);
                 
-                // Exact format from user example, but handle wildcards properly
-                $sql = "SELECT UPPER(a.hostname) as hostname FROM access.devicesnew a LEFT JOIN reporting.acc_alias b ON a.hostname = b.ccap_name WHERE (a.hostname LIKE '$searchPattern' OR b.alias LIKE '$searchPattern') AND a.active = 1 ORDER BY a.hostname";
+                // Exact format from user example, but handle wildcards properly and include ip_address
+                $sql = "SELECT UPPER(a.hostname) as hostname, a.loopbackip as ip_address FROM access.devicesnew a LEFT JOIN reporting.acc_alias b ON a.hostname = b.ccap_name WHERE (a.hostname LIKE '$searchPattern' OR b.alias LIKE '$searchPattern') AND a.active = 1 ORDER BY a.hostname";
                        
                 // Log what we expect to see in the database
                 error_log("Looking for ABR/DBR/CBR entries with hostname or alias matching: '$searchPattern'");
             }
             // Optimize queries for common *CCAP* case
             else if ($isAllCcapSearch) {
-                // Use a more efficient query when looking for all CCAP devices
+                // Use a more efficient query when looking for all CCAP devices - include IP address
                 $sql = "SELECT 
-                       UPPER(hostname) as hostname
+                       UPPER(hostname) as hostname,
+                       loopbackip as ip_address
                        FROM access.devicesnew 
                        WHERE hostname LIKE '%CCAP%'
                        AND active = 1
                        ORDER BY hostname";
             } else {
                 $sql = "SELECT 
-                       UPPER(a.hostname) as hostname
+                       UPPER(a.hostname) as hostname,
+                       a.loopbackip as ip_address
                        FROM access.devicesnew a 
                        LEFT JOIN reporting.acc_alias b ON a.hostname = b.ccap_name
                        WHERE (a.hostname LIKE '$escapedSearchQuery' OR b.alias LIKE '$escapedSearchQuery')
@@ -442,9 +444,17 @@ try {
             // First process all database results with empty IP addresses
             foreach ($dbResults as $device) {
                 $hostname = $device['hostname'];
+                
+                // Try to find IP from device entry if it exists
+                $ipAddress = '';
+                if (isset($device['ip_address'])) {
+                    $ipAddress = $device['ip_address'];
+                    error_log("Using IP address from database record: " . $ipAddress);
+                }
+                
                 $results[] = [
                     'hostname' => $hostname, 
-                    'ip_address' => ''
+                    'ip_address' => $ipAddress
                 ];
             }
             
@@ -823,7 +833,7 @@ try {
         
         // Process each result to ensure proper format
         foreach ($results as $result) {
-            $hostname = strtolower($result['hostname'] ?? '');
+            $hostname = strtoupper($result['hostname'] ?? '');
             $ipAddress = '';
             
             // Skip duplicate hostnames (we might get the same device from both database and Netshot)
@@ -849,9 +859,9 @@ try {
                 $ipAddress = $ipAddress['ip'];
             }
             
-            // Add the processed result
+            // Add the processed result with uppercase hostname
             $processedResults[] = [
-                'HostName' => $hostname,
+                'HostName' => strtoupper($hostname),
                 'IPAddress' => $ipAddress
             ];
             
