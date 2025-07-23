@@ -8,8 +8,6 @@
 class NetshotAPI {
     private $apiUrl;
     private $apiKey;
-    private $cacheTime = 3600; // Cache results for 1 hour by default
-    private $cacheDir;
     
     /**
      * Constructor
@@ -33,12 +31,6 @@ class NetshotAPI {
             $_ENV['NETSHOT_API_TOKEN'] ?? 
             $_ENV['NETSHOT_OSS_TOKEN'] ?? 
             'UqRf6NkgvKru3rxRRrRKck1VoANQJvP2';
-        
-        // Set up cache directory
-        $this->cacheDir = __DIR__ . '/../cache/netshot';
-        if (!file_exists($this->cacheDir)) {
-            mkdir($this->cacheDir, 0755, true);
-        }
     }
 
     /**
@@ -47,12 +39,6 @@ class NetshotAPI {
      * @return array List of groups
      */
     public function getGroups() {
-        // Check cache first
-        $cacheKey = "netshot_groups";
-        $cachedResult = $this->getFromCache($cacheKey);
-        if ($cachedResult !== false) {
-            return $cachedResult;
-        }
         
         $url = "{$this->apiUrl}/groups";
         
@@ -83,8 +69,7 @@ class NetshotAPI {
             
             error_log("Retrieved " . count($groups) . " groups from Netshot");
             
-            // Cache the results
-            $this->saveToCache($cacheKey, $groups);
+            // Return the results directly without caching
             
             return $groups;
         } catch (Exception $e) {
@@ -129,13 +114,6 @@ class NetshotAPI {
             }
         }
         
-        // Check cache first
-        $cacheKey = "devices_group_{$groupId}";
-        $cachedResult = $this->getFromCache($cacheKey);
-        if ($cachedResult !== false) {
-            return $cachedResult;
-        }
-        
         $url = "{$this->apiUrl}/devices?group={$groupId}";
         error_log("Querying Netshot for devices in group {$groupId}: {$url}");
         
@@ -165,8 +143,7 @@ class NetshotAPI {
             $result = json_decode($response, true) ?: [];
             error_log("Retrieved " . count($result) . " devices from Netshot group {$groupId}");
             
-            // Save to cache
-            $this->saveToCache($cacheKey, $result);
+            // Return the result directly without caching
             
             return $result;
         } catch (Exception $e) {
@@ -176,63 +153,14 @@ class NetshotAPI {
     }
     
     /**
-     * Get data from cache
+     * Placeholder method for backward compatibility
      * 
-     * @param string $key The cache key
-     * @return mixed The cached data or false if not found/expired
-     */
-    private function getFromCache($key) {
-        $cacheFile = $this->cacheDir . '/' . md5($key) . '.cache';
-        
-        if (file_exists($cacheFile)) {
-            $data = file_get_contents($cacheFile);
-            $cache = json_decode($data, true);
-            
-            // Check if cache is still valid
-            if ($cache['expires'] > time()) {
-                return $cache['data'];
-            }
-        }
-        
-        return false;
-    }
-    
-    /**
-     * Save data to cache
-     * 
-     * @param string $key The cache key
-     * @param mixed $data The data to cache
-     * @return bool Success or failure
-     */
-    private function saveToCache($key, $data) {
-        $cacheFile = $this->cacheDir . '/' . md5($key) . '.cache';
-        
-        $cache = [
-            'expires' => time() + $this->cacheTime,
-            'data' => $data
-        ];
-        
-        return file_put_contents($cacheFile, json_encode($cache)) !== false;
-    }
-    
-    /**
-     * Clear the cache for a specific key or all cache
-     * 
-     * @param string|null $key The cache key (or null to clear all)
+     * @param string|null $key The cache key (ignored)
      * @return void
      */
     public function clearCache($key = null) {
-        if ($key) {
-            $cacheFile = $this->cacheDir . '/' . md5($key) . '.cache';
-            if (file_exists($cacheFile)) {
-                unlink($cacheFile);
-            }
-        } else {
-            $files = glob($this->cacheDir . '/*.cache');
-            foreach ($files as $file) {
-                unlink($file);
-            }
-        }
+        // Method kept for backward compatibility but does nothing
+        return;
     }
     
     /**
@@ -243,13 +171,6 @@ class NetshotAPI {
      */
     public function searchDevicesByIp($ipPattern) {
         try {
-            // Check cache first
-            $cacheKey = "search_ip_" . $ipPattern;
-            $cachedResult = $this->getFromCache($cacheKey);
-            if ($cachedResult !== false) {
-                error_log("Using cached IP wildcard search results for: " . $ipPattern);
-                return $cachedResult;
-            }
             
             // Convert SQL LIKE pattern to regex
             $regexPattern = $this->patternToRegex($ipPattern);
@@ -277,9 +198,6 @@ class NetshotAPI {
             }
             
             error_log("Found " . count($results) . " matching devices for IP pattern: " . $ipPattern);
-            
-            // Save to cache
-            $this->saveToCache($cacheKey, $results);
             return $results;
         } catch (Exception $e) {
             error_log("Error in searchDevicesByIp: " . $e->getMessage());
@@ -295,13 +213,6 @@ class NetshotAPI {
      */
     public function getDeviceByHostname($hostname) {
         try {
-            // Check cache first
-            $cacheKey = "device_hostname_" . strtolower($hostname);
-            $cachedResult = $this->getFromCache($cacheKey);
-            if ($cachedResult !== false) {
-                error_log("Using cached Netshot data for hostname: " . $hostname);
-                return $cachedResult;
-            }
             
             $devices = $this->getDevicesInGroup();
             error_log("Searching " . count($devices) . " Netshot devices for hostname: " . $hostname);
@@ -339,8 +250,6 @@ class NetshotAPI {
                         }
                     }
                     
-                    // Save to cache
-                    $this->saveToCache($cacheKey, $device);
                     return $device;
                 }
             }
@@ -376,16 +285,13 @@ class NetshotAPI {
                             }
                         }
                         
-                        // Save to cache
-                        $this->saveToCache($cacheKey, $device);
                         return $device;
                     }
                 }
             }
             
-            // No match found - cache null result to prevent repeated lookups
+            // No match found
             error_log("No hostname match found in Netshot for: " . $hostname);
-            $this->saveToCache($cacheKey, null);
             return null;
         } catch (Exception $e) {
             error_log("Error in getDeviceByHostname: " . $e->getMessage());
@@ -420,13 +326,6 @@ class NetshotAPI {
      */
     public function getDeviceByIP($ipAddress) {
         try {
-            // Check cache first
-            $cacheKey = "device_ip_" . $ipAddress;
-            $cachedResult = $this->getFromCache($cacheKey);
-            if ($cachedResult !== false) {
-                error_log("Using cached Netshot data for IP: " . $ipAddress);
-                return $cachedResult;
-            }
             
             error_log("Fetching devices from Netshot for IP lookup: " . $ipAddress);
             $devices = $this->getDevicesInGroup();
@@ -445,14 +344,11 @@ class NetshotAPI {
                         'last_check' => $device['lastCheck'] ?? null
                     ];
                     
-                    // Save to cache
-                    $this->saveToCache($cacheKey, $result);
                     return $result;
                 }
             }
             
-            // Device not found - cache null result to prevent repeated lookups
-            $this->saveToCache($cacheKey, null);
+            // Device not found
             return null;
         } catch (Exception $e) {
             error_log("Error in getDeviceByIP: " . $e->getMessage());
@@ -468,13 +364,6 @@ class NetshotAPI {
      */
     public function getDeviceNamesByIP($ipAddress) {
         try {
-            // Check cache first
-            $cacheKey = "device_names_ip_" . $ipAddress;
-            $cachedResult = $this->getFromCache($cacheKey);
-            if ($cachedResult !== false) {
-                error_log("Using cached hostname results for IP: " . $ipAddress);
-                return $cachedResult;
-            }
             
             error_log("Looking up hostnames for IP: " . $ipAddress);
             $devices = $this->getDevicesInGroup();
@@ -488,8 +377,6 @@ class NetshotAPI {
                 }
             }
             
-            // Save to cache
-            $this->saveToCache($cacheKey, $hostnames);
             return $hostnames;
         } catch (Exception $e) {
             error_log("Error in getDeviceNamesByIP: " . $e->getMessage());

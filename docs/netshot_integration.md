@@ -101,11 +101,7 @@ The API includes several optimizations to ensure fast response times:
 
 3. **Limited Processing**: For large result sets (over 50 devices), the API intelligently limits Netshot data processing to the most relevant devices.
 
-4. **Asynchronous Data Loading**: Database results are immediately returned while Netshot data is processed in the background.
-
-## Caching
-
-For further performance improvement, Netshot API responses are cached for one hour. This helps reduce load on the Netshot system and provides faster responses for repeated queries.
+4. **Direct Data Access**: The API directly accesses data sources without caching overhead to ensure data is always current.
 
 ## Example Usage
 

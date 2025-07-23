@@ -257,7 +257,7 @@ try {
             if (!$auth->validateHostname($query)) {
                 http_response_code(400);
                 echo json_encode([
-                    'error' => 'Invalid hostname format. Expected: 4char-2char4num-CCAPxxx or CCAP* for wildcard',
+                    'error' => 'Invalid hostname format. Expected: ^[a-zA-Z]{2,4}-(RC|LC)0\d{3}-CCAP[1-6]0[0-9]$ or * for wildcard',
                     'example' => 'GV-RC0011-CCAP003',
                     'wildcard_example' => 'CCAP*',
                     'status' => 400
