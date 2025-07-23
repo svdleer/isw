@@ -78,6 +78,19 @@ When a device is found in Netshot, the API response will include additional info
 
 If a device is not found in the local CMDB database but exists in Netshot, the API will still return it with available Netshot data, ensuring you get the most complete information possible.
 
+## IP Address Field in Netshot
+
+The API looks for IP addresses in Netshot devices using the following field names (in order of preference):
+- `mgmtAddress`
+- `mgmtIp`
+- `managementIp`
+- `ip`
+- `ipAddress`
+- `address`
+- `primaryIp`
+
+If none of these fields contain a valid IP address, the system will fall back to generating an IP address algorithmically based on the hostname pattern.
+
 ## Caching
 
 To improve performance, Netshot API responses are cached for one hour. This helps reduce load on the Netshot system and provides faster responses for repeated queries.

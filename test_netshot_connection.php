@@ -183,10 +183,33 @@ $device = $netshot->getDeviceByHostname($hostname);
 if ($device) {
     echo "Found device in Netshot:\n";
     echo "  Name: " . ($device['name'] ?? 'Unknown') . "\n";
-    echo "  IP: " . ($device['mgmtIp'] ?? $device['ip'] ?? 'Unknown') . "\n";
+    
+    // Check all possible IP fields
+    $ipFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
+    $foundIp = 'Unknown';
+    $ipFieldFound = '';
+    foreach ($ipFields as $field) {
+        if (isset($device[$field]) && !empty($device[$field])) {
+            $foundIp = $device[$field];
+            $ipFieldFound = $field;
+            break;
+        }
+    }
+    echo "  IP: {$foundIp}" . ($ipFieldFound ? " (from field: {$ipFieldFound})" : "") . "\n";
+    
     echo "  Domain: " . ($device['domain'] ?? 'Unknown') . "\n";
     echo "  Family: " . ($device['family'] ?? 'Unknown') . "\n";
     echo "  Status: " . ($device['status'] ?? 'Unknown') . "\n";
+    
+    // Show all fields in the device to help troubleshoot
+    echo "\n  All fields in device:\n";
+    foreach ($device as $key => $value) {
+        if (!is_array($value)) {
+            echo "    {$key}: {$value}\n";
+        } else {
+            echo "    {$key}: [array]\n";
+        }
+    }
 } else {
     echo "Hostname not found in Netshot\n";
 }
