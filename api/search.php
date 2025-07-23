@@ -271,11 +271,21 @@ try {
             
             // Check if this is an ABR/DBR/CBR hostname and try to map it to a CCAP hostname
             $originalQuery = $query;
+            // Remove wildcards for detection
+            $queryForDetection = str_replace(['*', '%'], '', $originalQuery);
             $abrPattern = '/^[a-zA-Z]{2}\d{2}(abr|dbr|cbr)\d{1,4}$/i';
             $alternativePattern = '/(abr|dbr|cbr)/i';
             $isAbrFormat = false;
             
-            if (preg_match($abrPattern, $originalQuery) || preg_match($alternativePattern, $originalQuery)) {
+            // Special case for wildcard searches containing ABR/DBR/CBR
+            $hasWildcard = (strpos($originalQuery, '*') !== false || strpos($originalQuery, '%') !== false);
+            $containsAbrKeyword = (stripos($originalQuery, 'abr') !== false || 
+                                  stripos($originalQuery, 'dbr') !== false || 
+                                  stripos($originalQuery, 'cbr') !== false);
+            
+            if (preg_match($abrPattern, $queryForDetection) || 
+                preg_match($alternativePattern, $queryForDetection) || 
+                ($hasWildcard && $containsAbrKeyword)) {
                 error_log("ABR/DBR/CBR format hostname detected: " . $originalQuery);
                 $isAbrFormat = true;
                 
@@ -336,11 +346,16 @@ try {
             // Special case for ABR/DBR/CBR format
             if ($isAbrFormat) {
                 error_log("Using ABR/DBR/CBR optimized query for: " . $escapedOriginalQuery);
-                // Exact format from user example
-                $sql = "SELECT UPPER(a.hostname) as hostname FROM access.devicesnew a LEFT JOIN reporting.acc_alias b ON a.hostname = b.ccap_name WHERE (a.hostname LIKE '%$escapedOriginalQuery%' OR b.alias LIKE '%$escapedOriginalQuery%') AND a.active = 1 ORDER BY a.hostname";
+                
+                // Handle wildcards in the query
+                $hasWildcard = (strpos($originalQuery, '*') !== false || strpos($originalQuery, '%') !== false);
+                $searchPattern = $hasWildcard ? str_replace(['*', '%'], ['%', '%'], $escapedOriginalQuery) : "%$escapedOriginalQuery%";
+                
+                // Exact format from user example, but handle wildcards properly
+                $sql = "SELECT UPPER(a.hostname) as hostname FROM access.devicesnew a LEFT JOIN reporting.acc_alias b ON a.hostname = b.ccap_name WHERE (a.hostname LIKE '$searchPattern' OR b.alias LIKE '$searchPattern') AND a.active = 1 ORDER BY a.hostname";
                        
                 // Log what we expect to see in the database
-                error_log("Looking for ABR/DBR/CBR entries with hostname or alias containing: '$escapedOriginalQuery'");
+                error_log("Looking for ABR/DBR/CBR entries with hostname or alias matching: '$searchPattern'");
             }
             // Optimize queries for common *CCAP* case
             else if ($isAllCcapSearch) {

@@ -407,6 +407,12 @@ class NetshotAPI {
      * @return string The original hostname or the mapped CCAP hostname
      */
     public function mapAbrToCcapHostname($hostname) {
+        // Check if this is a wildcard search - in that case we return as is
+        if (strpos($hostname, '*') !== false || strpos($hostname, '%') !== false) {
+            error_log("Wildcard detected in hostname: $hostname - skipping ABR/DBR/CBR mapping");
+            return $hostname;
+        }
+        
         // Check for ABR/DBR/CBR pattern - more flexible to match various formats
         $abrPattern = '/^[a-zA-Z]{2}\d{2}(abr|dbr|cbr)\d{1,4}$/i';
         $alternativePattern = '/(abr|dbr|cbr)/i';
