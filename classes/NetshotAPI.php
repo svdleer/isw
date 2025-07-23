@@ -8,14 +8,16 @@
 class NetshotAPI {
     private $apiUrl;
     private $apiKey;
+    private $group;
     
     /**
      * Constructor
      * 
      * @param string $apiUrl The base URL for Netshot API
      * @param string $apiKey The API key for authentication
+     * @param string|int $group The Netshot group name or ID to use
      */
-    public function __construct($apiUrl = null, $apiKey = null) {
+    public function __construct($apiUrl = null, $apiKey = null, $group = null) {
         // Load environment variables
         require_once __DIR__ . '/EnvLoader.php';
         EnvLoader::load();
@@ -31,6 +33,12 @@ class NetshotAPI {
             $_ENV['NETSHOT_API_TOKEN'] ?? 
             $_ENV['NETSHOT_OSS_TOKEN'] ?? 
             'UqRf6NkgvKru3rxRRrRKck1VoANQJvP2';
+            
+        // Store group information from parameter or environment variable
+        $this->group = $group ?: 
+            $_ENV['NETSHOT_GROUP'] ?? 
+            $_ENV['NETSHOT_GROUP_ID'] ?? 
+            'ACCESS';
     }
 
     /**
@@ -79,12 +87,16 @@ class NetshotAPI {
     }
 
     /**
-     * Find a group ID by name
+     * Find a group ID by name - Kept for backward compatibility
      * 
      * @param string $groupName The name of the group to find
      * @return int|null The group ID if found, null otherwise
+     * @deprecated Use getDevicesInGroup() directly with group name parameter instead
      */
     public function findGroupIdByName($groupName = 'ACCESS') {
+        error_log("Warning: findGroupIdByName is deprecated. Use getDevicesInGroup() directly.");
+        
+        // For backwards compatibility we still implement this
         $groups = $this->getGroups();
         
         foreach ($groups as $group) {
@@ -101,21 +113,34 @@ class NetshotAPI {
     /**
      * Get devices from a specific group
      * 
-     * @param int|null $groupId The ID of the group to fetch devices from
+     * @param int|string|null $groupParam Optional override for the group ID/name to fetch devices from
      * @return array Devices in the specified group
      */
-    public function getDevicesInGroup($groupId = null) {
-        // If no group ID is provided, try to find the ACCESS group
-        if ($groupId === null) {
-            $groupId = $this->findGroupIdByName('ACCESS');
-            if ($groupId === null) {
-                error_log("No ACCESS group found in Netshot, using fallback");
-                $groupId = 207; // Fallback to default group ID
+    public function getDevicesInGroup($groupParam = null) {
+        // Use parameter if provided, otherwise use the class property
+        $group = $groupParam !== null ? $groupParam : $this->group;
+        $groupQueryParam = '';
+        
+        // Handle the group parameter based on whether it's numeric (ID) or a string (name)
+        if (is_numeric($group)) {
+            // If it's a number, use it directly as the group ID
+            $groupQueryParam = "group=" . $group;
+            error_log("Using numeric group ID: {$group}");
+        } else {
+            // If it's a string and looks like a group name
+            if (preg_match('/^[A-Za-z]/', $group)) {
+                // It's a name, so we search by name filter
+                $groupQueryParam = "groupNameFilter=" . urlencode($group);
+                error_log("Using group name filter: {$group}");
+            } else {
+                // Default to a reasonable group ID if all else fails
+                $groupQueryParam = "group=240"; // Fallback to default group ID
+                error_log("Using fallback group ID: 240");
             }
         }
         
-        $url = "{$this->apiUrl}/devices?group={$groupId}";
-        error_log("Querying Netshot for devices in group {$groupId}: {$url}");
+        $url = "{$this->apiUrl}/devices?{$groupQueryParam}";
+        error_log("Querying Netshot for devices: {$url}");
         
         try {
             $ch = curl_init();
@@ -141,7 +166,7 @@ class NetshotAPI {
             curl_close($ch);
             
             $result = json_decode($response, true) ?: [];
-            error_log("Retrieved " . count($result) . " devices from Netshot group {$groupId}");
+            error_log("Retrieved " . count($result) . " devices from Netshot using {$groupQueryParam}");
             
             // Return the result directly without caching
             
