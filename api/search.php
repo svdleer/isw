@@ -220,7 +220,7 @@ try {
             $searchQuery = str_replace('*', '%', $searchQuery);
             
             // Query that gets only active devices 
-            $sql = "SELECT a.hostname, a.ipaddress as ip_address, a.description, 
+            $sql = "SELECT a.hostname, a.ip_address, a.description, 
                    a.created_at, a.updated_at, a.location
                    FROM access.devicesnew a 
                    LEFT JOIN reporting.acc_alias b ON UPPER(a.hostname) = UPPER(b.ccap_name)
@@ -256,21 +256,21 @@ try {
             // SQL query for IP search - only return active devices
             if (strpos($searchQuery, '%') !== false) {
                 // Wildcard search
-                $sql = "SELECT a.hostname, a.ipaddress as ip_address, a.description,
+                $sql = "SELECT a.hostname, a.ip_address, a.description,
                        a.created_at, a.updated_at, a.location
                        FROM access.devicesnew a
-                       WHERE a.ipaddress LIKE ? 
+                       WHERE a.ip_address LIKE ? 
                        AND a.active = 1
-                       ORDER BY a.ipaddress";
+                       ORDER BY a.ip_address";
                 $results = $db->query($sql, [$searchQuery]);
             } else {
                 // Exact search
-                $sql = "SELECT a.hostname, a.ipaddress as ip_address, a.description,
+                $sql = "SELECT a.hostname, a.ip_address, a.description,
                        a.created_at, a.updated_at, a.location
                        FROM access.devicesnew a
-                       WHERE a.ipaddress = ? 
+                       WHERE a.ip_address = ? 
                        AND a.active = 1
-                       ORDER BY a.ipaddress";
+                       ORDER BY a.ip_address";
                 $results = $db->query($sql, [$searchQuery]);
             }
             break;
