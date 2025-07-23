@@ -330,8 +330,16 @@ try {
                     $possibleIpFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
                     foreach ($possibleIpFields as $field) {
                         if (isset($netshotDevice[$field]) && !empty($netshotDevice[$field])) {
-                            $ipAddress = $netshotDevice[$field];
-                            error_log("Found IP in field '$field': " . $ipAddress);
+                            $rawIpValue = $netshotDevice[$field];
+                            
+                            // Handle case where IP is an object with 'ip' field
+                            if (is_array($rawIpValue) && isset($rawIpValue['ip'])) {
+                                $ipAddress = $rawIpValue['ip'];
+                                error_log("Found complex IP object in field '$field', extracted IP: " . $ipAddress);
+                            } else {
+                                $ipAddress = $rawIpValue;
+                                error_log("Found IP in field '$field': " . $ipAddress);
+                            }
                             break;
                         }
                     }
@@ -367,8 +375,16 @@ try {
                             $possibleIpFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
                             foreach ($possibleIpFields as $field) {
                                 if (isset($potentialMatch[$field]) && !empty($potentialMatch[$field])) {
-                                    $ipAddress = $potentialMatch[$field];
-                                    error_log("Found IP in field '$field' for alias match: " . $ipAddress);
+                                    $rawIpValue = $potentialMatch[$field];
+                                    
+                                    // Handle case where IP is an object with 'ip' field
+                                    if (is_array($rawIpValue) && isset($rawIpValue['ip'])) {
+                                        $ipAddress = $rawIpValue['ip'];
+                                        error_log("Found complex IP object in field '$field' for alias match, extracted IP: " . $ipAddress);
+                                    } else {
+                                        $ipAddress = $rawIpValue;
+                                        error_log("Found IP in field '$field' for alias match: " . $ipAddress);
+                                    }
                                     break;
                                 }
                             }
@@ -565,6 +581,12 @@ try {
         $ipAddress = '';
     } else {
         error_log("Using actual search results for response");
+    }
+    
+    // Final check to ensure IPAddress is always a simple string
+    if (is_array($ipAddress) && isset($ipAddress['ip'])) {
+        $ipAddress = $ipAddress['ip'];
+        error_log("Converted complex IP object to string in final response: " . $ipAddress);
     }
     
     $responseData = [
