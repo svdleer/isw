@@ -13,7 +13,8 @@ class Database {
 
     private function connect() {
         try {
-            $dsn = "mysql:host={$this->config['host']};dbname={$this->config['database']};charset={$this->config['charset']}";
+            // Connect without specifying a database to allow cross-database queries
+            $dsn = "mysql:host={$this->config['host']};charset={$this->config['charset']}";
             $this->connection = new PDO($dsn, $this->config['username'], $this->config['password'], $this->config['options']);
         } catch (PDOException $e) {
             throw new Exception("Database connection failed: " . $e->getMessage());

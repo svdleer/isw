@@ -5,26 +5,48 @@ info:
     A PHP REST API for querying a MySQL CMDB database with support for hostname and IP address searches using API key authentication.
     
     ## Authentication
-    All API endpoints require an API key that can be provided in two ways:
-    - Query parameter: `?api_key=your-key`
-    - HTTP Header: `X-API-Key: your-key`
+    All API endpoints require HTTP Basic Authentication.
+    
+    Authentication header format:
+    ```
+    Authorization: Basic base64(username:password)
+    ```
+    
+    Example:
+    ```
+    Authorization: Basic YWRtaW46cGFzc3dvcmQ=  (for username 'admin', password 'password')
+    ```
     
     ## Hostname Search Format
-    Hostnames must follow the pattern: `4char-2char4num-CCAPxxx`
+    Hostnames should contain "CCAP" and can be searched with wildcards.
+    
+    Typical format: `4char-2char4num-CCAPxxx`
     - 4char: 2 letters (a-z, case insensitive)  
     - 2char4num: 2 letters followed by 4 numbers
-    - CCAPxxx: Must start with "CCAP", followed by alphanumeric characters
+    - CCAPxxx: Must contain "CCAP"
     
     Examples:
     - `GV-RC0011-CCAP003` (exact search)
-    - `CCAP*` or `CCAP%` (wildcard search for all CCAP devices)
+    - `*CCAP*` or `%CCAP%` (wildcard search for all CCAP devices)
+    - `*` or `%` (searches for all hostnames containing "CCAP")
     
     ## IP Address Search
     Supports standard IPv4 addresses with optional wildcards.
     
+    IP Address Requirements:
+    - Must be valid IPv4 format (xxx.xxx.xxx.xxx) where each octet is 0-255
+    - Cannot contain leading zeros (e.g., 192.168.01.1 is invalid)
+    - Each octet can be replaced with a wildcard (* or %)
+    
     Examples:
     - `192.168.1.100` (exact search)
     - `192.168.1.*` or `192.168.1.%` (wildcard search)
+    
+    Invalid Examples:
+    - `192.168.1` (too few octets)
+    - `192.168.1.256` (octet value too large)
+    - `192.168.1.1.1` (too many octets)
+    - `192.168.01.1` (leading zeros not allowed)
   version: 1.0.0
   contact:
     name: ISW CMDB API Support
@@ -40,14 +62,85 @@ servers:
     description: Production server
 
 security:
-  - ApiKeyAuth: []
+  - BasicAuth: []
 
 paths:
   /api/search:
     get:
-      summary: Search devices
-      description: Search for devices by hostname or IP address with optional wildcard support
-      operationId: searchDevices
+      summary: Search devices (GET method)
+      description: Search for devices by hostname or IP address with optional wildcard support using query parameters
+      operationId: searchDevicesGet
+    post:
+      summary: Search devices (POST method)
+      description: Search for devices by hostname or IP address with JSON request body
+      operationId: searchDevicesPost
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                Header:
+                  type: object
+                  properties:
+                    BusinessTransactionID:
+                      type: string
+                      example: "1"
+                    SentTimestamp:
+                      type: string
+                      format: date-time
+                      example: "2023-11-10T09:20:00"
+                    SourceContext:
+                      type: object
+                      properties:
+                        host:
+                          type: string
+                        application:
+                          type: string
+                Body:
+                  type: object
+                  oneOf:
+                    - properties:
+                        HostName:
+                          type: string
+                          example: "GV-RC0052-CCAP002"
+                    - properties:
+                        IPAddress:
+                          type: string
+                          example: "172.16.55.26"
+      responses:
+        '200':
+          description: Successful response with device data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  search_type:
+                    type: string
+                    enum: [hostname, ip]
+                    example: hostname
+                  query:
+                    type: string
+                    example: GV-RC0052-CCAP002
+                  count:
+                    type: integer
+                    example: 1
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Device'
+                  request:
+                    type: object
+                    properties:
+                      header:
+                        type: object
+                      body:
+                        type: object
       parameters:
         - name: type
           in: query
@@ -269,11 +362,10 @@ paths:
 
 components:
   securitySchemes:
-    ApiKeyAuth:
-      type: apiKey
-      in: header
-      name: X-API-Key
-      description: API key for authentication
+    BasicAuth:
+      type: http
+      scheme: basic
+      description: HTTP Basic Authentication with username and password
 
   schemas:
     Device:

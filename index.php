@@ -15,14 +15,14 @@ $requestUri = rtrim($requestUri, '/');
 switch ($requestUri) {
     case '/api/search':
     case '/search':
-        if ($requestMethod === 'GET') {
+        if ($requestMethod === 'GET' || $requestMethod === 'POST') {
             require_once __DIR__ . '/api/search.php';
         } else {
             http_response_code(405);
             header('Content-Type: application/json');
             echo json_encode([
                 'error' => 'Method not allowed',
-                'allowed_methods' => ['GET'],
+                'allowed_methods' => ['GET', 'POST'],
                 'status' => 405
             ]);
         }
@@ -52,16 +52,20 @@ switch ($requestUri) {
             'message' => 'ISW CMDB API',
             'version' => '1.0.0',
             'endpoints' => [
-                'search' => '/api/search?type={hostname|ip}&q={query}&api_key={key}',
+                'search_get' => '/api/search?type={hostname|ip}&q={query}',
+                'search_post' => '/api/search (JSON body format)',
                 'health' => '/api/health',
                 'docs' => '/docs/',
                 'admin' => '/admin/'
             ],
+            'authentication' => 'HTTP Basic Authentication required (Authorization: Basic base64(username:password))',
             'examples' => [
-                'hostname_exact' => '/api/search?type=hostname&q=GV-RC0011-CCAP003&api_key=your-key',
-                'hostname_wildcard' => '/api/search?type=hostname&q=CCAP*&api_key=your-key',
-                'ip_exact' => '/api/search?type=ip&q=192.168.1.100&api_key=your-key',
-                'ip_wildcard' => '/api/search?type=ip&q=192.168.1.*&api_key=your-key'
+                'hostname_exact' => '/api/search?type=hostname&q=GV-RC0011-CCAP003',
+                'hostname_wildcard' => '/api/search?type=hostname&q=CCAP*',
+                'ip_exact' => '/api/search?type=ip&q=192.168.1.100',
+                'ip_wildcard' => '/api/search?type=ip&q=192.168.1.*',
+                'post_hostname' => '{"Header":{"BusinessTransactionID":"1","SentTimestamp":"2023-11-10T09:20:00","SourceContext":{"host":"String","application":"String"}},"Body":{"HostName":"GV-RC0052-CCAP002"}}',
+                'post_ip' => '{"Header":{"BusinessTransactionID":"1","SentTimestamp":"2023-11-10T09:20:00","SourceContext":{"host":"String","application":"String"}},"Body":{"IPAddress":"172.16.55.26"}}'
             ],
             'documentation' => '/docs/',
             'admin_panel' => '/admin/'
