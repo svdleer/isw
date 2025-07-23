@@ -276,6 +276,9 @@ class NetshotAPI {
                 error_log("Hostname mapped from ABR/DBR/CBR format: $originalHostname to CCAP: $hostname");
             }
             
+            // Ensure hostname is always in uppercase
+            $hostname = strtoupper($hostname);
+            
             // Validate hostname format if required and not an ABR/DBR/CBR that was mapped
             if ($validateFormat) {
                 // Compliant hostname regex: 2-4 letters, followed by -RC or -LC, followed by 0 and 3 digits, followed by -CCAP and digit 1-6 followed by 0 and another digit
@@ -407,17 +410,19 @@ class NetshotAPI {
      * @return string The original hostname or the mapped CCAP hostname
      */
     public function mapAbrToCcapHostname($hostname) {
-        // Check if this is a wildcard search - in that case we return as is
+        // Check if this is a wildcard search - in that case we return as is (but in uppercase)
         if (strpos($hostname, '*') !== false || strpos($hostname, '%') !== false) {
             error_log("Wildcard detected in hostname: $hostname - skipping ABR/DBR/CBR mapping");
-            return $hostname;
+            // Convert wildcard pattern to uppercase but preserve wildcards
+            $uppercaseHostname = strtoupper($hostname);
+            return $uppercaseHostname;
         }
         
         // Additional pattern for adXX* or ahXX* format (where XX are numbers)
         $adAhPattern = '/^(ad|ah)\d{2}/i';
         if (preg_match($adAhPattern, $hostname)) {
             error_log("adXX/ahXX pattern detected in NetshotAPI: " . $hostname . " - skipping CCAP mapping");
-            return $hostname;
+            return strtoupper($hostname); // Return in uppercase
         }
         
         // Check for ABR/DBR/CBR pattern - more flexible to match various formats
@@ -425,8 +430,8 @@ class NetshotAPI {
         $alternativePattern = '/(abr|dbr|cbr)/i';
         
         if (!preg_match($abrPattern, $hostname) && !preg_match($alternativePattern, $hostname)) {
-            // Not an ABR/DBR/CBR hostname, return as is
-            return $hostname;
+            // Not an ABR/DBR/CBR hostname, return as is but in uppercase
+            return strtoupper($hostname);
         }
         
         error_log("ABR/DBR/CBR format detected: " . $hostname . ". Looking up corresponding CCAP device.");
@@ -447,16 +452,16 @@ class NetshotAPI {
             
             $result = $db->query($sql);
             if (!empty($result) && isset($result[0]['ccap_name'])) {
-                $ccapHostname = $result[0]['ccap_name'];
+                $ccapHostname = strtoupper($result[0]['ccap_name']);
                 error_log("Found corresponding CCAP hostname: " . $ccapHostname . " for ABR/DBR/CBR device: " . $hostname);
                 return $ccapHostname;
             } else {
                 error_log("No CCAP mapping found for ABR/DBR/CBR device: " . $hostname);
-                return $hostname; // Return original if no mapping found
+                return strtoupper($hostname); // Return original in uppercase if no mapping found
             }
         } catch (Exception $dbException) {
             error_log("Database error looking up ABR/DBR/CBR alias: " . $dbException->getMessage());
-            return $hostname; // Return original on error
+            return strtoupper($hostname); // Return original in uppercase on error
         }
     }
     
