@@ -309,8 +309,7 @@ try {
             // For ABR/DBR/CBR format, don't force CCAP in the search criteria
             if ($isAbrFormat) {
                 error_log("ABR/DBR/CBR format detected - not adding CCAP to search query");
-                // For ABR format, ensure we're using the original query as-is without any modifications
-                $searchQuery = $originalQuery;
+                // No need to modify searchQuery here as the SQL will be constructed directly using the original query
             }
             // For normal searches, always make sure CCAP is part of the search criteria
             else if (stripos($searchQuery, 'CCAP') === false) {
