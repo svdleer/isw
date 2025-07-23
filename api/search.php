@@ -291,30 +291,32 @@ try {
             // Log the final search query for debugging
             error_log("Final hostname search query: " . $searchQuery);
             
-            // First let's run a count query to see if there are ANY devices in the database
-            try {
-                $countSql = "SELECT COUNT(*) as total FROM access.devicesnew WHERE active = 1";
-                $countResult = $db->query($countSql);
-                error_log("Total devices in database: " . $countResult[0]['total']);
-                
-                // Let's also check if any devices contain 'CCAP'
-                $ccapCountSql = "SELECT COUNT(*) as total FROM access.devicesnew WHERE UPPER(hostname) LIKE '%CCAP%' AND active = 1";
-                $ccapCountResult = $db->query($ccapCountSql);
-                error_log("Total CCAP devices in database: " . $ccapCountResult[0]['total']);
-            } catch (Exception $e) {
-                error_log("Error running diagnostic queries: " . $e->getMessage());
-            }
+            // Performance optimization for *CCAP* searches - use a direct index
+            $isAllCcapSearch = (strtoupper($searchQuery) === '%CCAP%' || $query === '*CCAP*');
+            error_log("Is all CCAP search: " . ($isAllCcapSearch ? "Yes" : "No"));
             
             // Updated SQL query based on actual database structure with direct string interpolation
             // Not using loopbackip since it's not useful
             $escapedSearchQuery = str_replace("'", "''", $searchQuery); // Basic SQL escaping for the LIKE clause
-            $sql = "SELECT 
-                   UPPER(a.hostname) as hostname
-                   FROM access.devicesnew a 
-                   LEFT JOIN reporting.acc_alias b ON a.hostname = b.ccap_name
-                   WHERE (a.hostname LIKE '$escapedSearchQuery' OR b.alias LIKE '$escapedSearchQuery')
-                   AND a.active = 1
-                   ORDER BY a.hostname";
+            
+            // Optimize queries for common *CCAP* case
+            if ($isAllCcapSearch) {
+                // Use a more efficient query when looking for all CCAP devices
+                $sql = "SELECT 
+                       UPPER(hostname) as hostname
+                       FROM access.devicesnew 
+                       WHERE hostname LIKE '%CCAP%'
+                       AND active = 1
+                       ORDER BY hostname";
+            } else {
+                $sql = "SELECT 
+                       UPPER(a.hostname) as hostname
+                       FROM access.devicesnew a 
+                       LEFT JOIN reporting.acc_alias b ON a.hostname = b.ccap_name
+                       WHERE (a.hostname LIKE '$escapedSearchQuery' OR b.alias LIKE '$escapedSearchQuery')
+                       AND a.active = 1
+                       ORDER BY a.hostname";
+            }
             
             // Debug: Log the SQL query with interpolated parameters
             error_log("Executing SQL query with interpolated parameters: " . $sql);
@@ -324,33 +326,62 @@ try {
             // Log the number of results found
             error_log("Database query returned " . count($dbResults) . " results for hostname search: " . $searchQuery);
             
-            // OPTIMIZATION: Get all Netshot devices in a single API call
-            error_log("Getting all devices from Netshot in a single API call");
-            $netshotDevices = $netshot->getDevicesInGroup();
-            error_log("Retrieved " . count($netshotDevices) . " devices from Netshot");
-            
-            // Create a lookup map for faster matching
-            $netshotDeviceMap = [];
-            foreach ($netshotDevices as $netshotDevice) {
-                if (isset($netshotDevice['name']) && !empty($netshotDevice['name'])) {
-                    $deviceName = strtoupper($netshotDevice['name']);
-                    $netshotDeviceMap[$deviceName] = $netshotDevice;
-                }
-            }
-            error_log("Created Netshot device map with " . count($netshotDeviceMap) . " entries");
-            
-            // Process each device from the database
+            // Process each device from the database first without Netshot to avoid delay
             $results = [];
+            
+            // For *CCAP* queries that might return many results, limit Netshot processing to improve performance
+            $shouldLimitNetshot = ($isAllCcapSearch && count($dbResults) > 50);
+            $maxNetshotLookups = 50; // Limit how many devices we'll look up in Netshot for large result sets
+            $processedNetshot = 0;
+            
+            // First process all database results with empty IP addresses
             foreach ($dbResults as $device) {
                 $hostname = $device['hostname'];
-                // Initialize with empty IP address, we'll get it from Netshot or generate it
-                $deviceWithIp = [
+                $results[] = [
                     'hostname' => $hostname, 
                     'ip_address' => ''
                 ];
+            }
+            
+            // Skip Netshot processing for huge result sets
+            if ($shouldLimitNetshot) {
+                error_log("Large result set detected (" . count($dbResults) . " devices). Limiting Netshot processing to $maxNetshotLookups devices.");
                 
-                // Try to find a direct match in our Netshot device map
-                $netshotDevice = $netshotDeviceMap[strtoupper($hostname)] ?? null;
+                // Process only the most important/critical devices with Netshot data
+                // For example: the first $maxNetshotLookups devices
+                $dbResults = array_slice($dbResults, 0, $maxNetshotLookups);
+            }
+            
+            // Only if we need Netshot data, make the API call
+            if (!empty($dbResults)) {
+                // OPTIMIZATION: Get all Netshot devices in a single API call
+                error_log("Getting all devices from Netshot in a single API call");
+                $startTime = microtime(true);
+                $netshotDevices = $netshot->getDevicesInGroup();
+                $endTime = microtime(true);
+                error_log("Retrieved " . count($netshotDevices) . " devices from Netshot in " . 
+                          number_format(($endTime - $startTime), 2) . " seconds");
+                
+                // Create a lookup map for faster matching
+                $startTime = microtime(true);
+                $netshotDeviceMap = [];
+                foreach ($netshotDevices as $netshotDevice) {
+                    if (isset($netshotDevice['name']) && !empty($netshotDevice['name'])) {
+                        $deviceName = strtoupper($netshotDevice['name']);
+                        $netshotDeviceMap[$deviceName] = $netshotDevice;
+                    }
+                }
+                $endTime = microtime(true);
+                error_log("Created Netshot device map with " . count($netshotDeviceMap) . " entries in " . 
+                          number_format(($endTime - $startTime), 2) . " seconds");
+                
+                // Now process devices to add Netshot data
+                $startTime = microtime(true);
+                foreach ($dbResults as $index => $device) {
+                    $hostname = $device['hostname'];
+                    
+                    // Try to find a direct match in our Netshot device map
+                    $netshotDevice = $netshotDeviceMap[strtoupper($hostname)] ?? null;
                 
                 // Log if we found a direct match
                 error_log("Netshot match for " . $hostname . ": " . ($netshotDevice ? "Found" : "Not found"));
@@ -378,15 +409,22 @@ try {
                     
                     if ($ipAddress) {
                         error_log("Found IP in Netshot for hostname " . $hostname . ": " . $ipAddress);
-                        $deviceWithIp['ip_address'] = $ipAddress;
-                        $deviceWithIp['netshot'] = [
-                            'id' => $netshotDevice['id'] ?? null,
-                            'name' => $netshotDevice['name'] ?? null,
-                            'ip' => $ipAddress,
-                            'model' => $netshotDevice['family'] ?? null,
-                            'vendor' => $netshotDevice['domain'] ?? null,
-                            'status' => $netshotDevice['status'] ?? null
-                        ];
+                        
+                        // Update the result in the results array
+                        foreach ($results as $key => $result) {
+                            if (strtoupper($result['hostname']) === strtoupper($hostname)) {
+                                $results[$key]['ip_address'] = $ipAddress;
+                                $results[$key]['netshot'] = [
+                                    'id' => $netshotDevice['id'] ?? null,
+                                    'name' => $netshotDevice['name'] ?? null,
+                                    'ip' => $ipAddress,
+                                    'model' => $netshotDevice['family'] ?? null,
+                                    'vendor' => $netshotDevice['domain'] ?? null,
+                                    'status' => $netshotDevice['status'] ?? null
+                                ];
+                                break;
+                            }
+                        }
                     } else {
                         error_log("No IP address found in Netshot device fields for hostname: " . $hostname);
                     }
@@ -423,15 +461,22 @@ try {
                             
                             if ($ipAddress) {
                                 error_log("Using IP from alias match for " . $hostname . ": " . $ipAddress);
-                                $deviceWithIp['ip_address'] = $ipAddress;
-                                $deviceWithIp['netshot'] = [
-                                    'id' => $potentialMatch['id'] ?? null,
-                                    'name' => $potentialMatch['name'] ?? null,
-                                    'ip' => $ipAddress,
-                                    'model' => $potentialMatch['family'] ?? null,
-                                    'vendor' => $potentialMatch['domain'] ?? null,
-                                    'status' => $potentialMatch['status'] ?? null
-                                ];
+                                
+                                // Update the result in the results array
+                                foreach ($results as $key => $result) {
+                                    if (strtoupper($result['hostname']) === strtoupper($hostname)) {
+                                        $results[$key]['ip_address'] = $ipAddress;
+                                        $results[$key]['netshot'] = [
+                                            'id' => $potentialMatch['id'] ?? null,
+                                            'name' => $potentialMatch['name'] ?? null,
+                                            'ip' => $ipAddress,
+                                            'model' => $potentialMatch['family'] ?? null,
+                                            'vendor' => $potentialMatch['domain'] ?? null,
+                                            'status' => $potentialMatch['status'] ?? null
+                                        ];
+                                        break;
+                                    }
+                                }
                                 $foundMatch = true;
                                 break;
                             }
@@ -444,17 +489,30 @@ try {
                 }
                 
                 // FALLBACK: If we didn't find an IP in Netshot, try to generate one from the hostname
-                if (empty($deviceWithIp['ip_address'])) {
-                    $ipAddress = generateIpFromHostname($hostname);
-                    if ($ipAddress) {
-                        $deviceWithIp['ip_address'] = $ipAddress;
-                        $deviceWithIp['_note'] = "IP address is algorithmically generated from hostname";
-                        error_log("Using generated IP for " . $hostname . ": " . $ipAddress);
+                foreach ($results as $key => $result) {
+                    if (strtoupper($result['hostname']) === strtoupper($hostname) && empty($result['ip_address'])) {
+                        $ipAddress = generateIpFromHostname($hostname);
+                        if ($ipAddress) {
+                            $results[$key]['ip_address'] = $ipAddress;
+                            $results[$key]['_note'] = "IP address is algorithmically generated from hostname";
+                            error_log("Using generated IP for " . $hostname . ": " . $ipAddress);
+                        }
+                        break;
                     }
                 }
                 
-                $results[] = $deviceWithIp;
-            }
+                // End of processing for this database result
+                $processedNetshot++;
+                if ($shouldLimitNetshot && $processedNetshot >= $maxNetshotLookups) {
+                    error_log("Reached Netshot processing limit ($maxNetshotLookups devices). Stopping further processing.");
+                    break;
+                }
+            } // End of foreach dbResults
+            
+            $endTime = microtime(true);
+            error_log("Processed Netshot data for " . count($dbResults) . " devices in " . 
+                      number_format(($endTime - $startTime), 2) . " seconds");
+            } // End of if !empty($dbResults)
             break;
             
         case 'ip':

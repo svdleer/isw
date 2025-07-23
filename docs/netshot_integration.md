@@ -93,7 +93,15 @@ If none of these fields contain a valid IP address, the system will fall back to
 
 ## Performance Optimization
 
-To improve performance, the API retrieves all Netshot devices in a single API call instead of making individual requests for each device. This significantly reduces network overhead and improves response times.
+The API includes several optimizations to ensure fast response times:
+
+1. **Single API Call**: All Netshot devices are retrieved in a single API call instead of making individual requests for each device.
+
+2. **Optimized Queries**: Special wildcard searches like `*CCAP*` use optimized SQL queries to improve database performance.
+
+3. **Limited Processing**: For large result sets (over 50 devices), the API intelligently limits Netshot data processing to the most relevant devices.
+
+4. **Asynchronous Data Loading**: Database results are immediately returned while Netshot data is processed in the background.
 
 ## Caching
 
