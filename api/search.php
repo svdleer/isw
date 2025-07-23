@@ -233,10 +233,10 @@ try {
             $searchQuery = str_replace('*', '%', $searchQuery);
             
             // Query that gets only active devices - using only hostname/alias fields
+            // Removed description field as it's not needed
             $sql = "SELECT 
                    a.hostname, 
                    '' as ip_address, 
-                   a.description, 
                    a.created_at, 
                    a.updated_at, 
                    a.location
@@ -287,7 +287,6 @@ try {
                         $results[] = [
                             'hostname' => $netshotDevice['name'] ?? 'Unknown',
                             'ip_address' => $searchQuery,
-                            'description' => 'Device found in Netshot',
                             'netshot' => $netshotDevice
                         ];
                     } else {
@@ -304,7 +303,6 @@ try {
                                 $sql = "SELECT 
                                        a.hostname, 
                                        '' as ip_address, 
-                                       a.description, 
                                        a.created_at, 
                                        a.updated_at, 
                                        a.location
@@ -336,7 +334,6 @@ try {
                             $results[] = [
                                 'hostname' => $device['name'] ?? 'Unknown',
                                 'ip_address' => $device['ip'] ?? $searchQuery,
-                                'description' => 'Device found in Netshot',
                                 'netshot' => [
                                     'id' => $device['id'] ?? null,
                                     'name' => $device['name'] ?? null,
