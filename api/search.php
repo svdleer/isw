@@ -130,14 +130,33 @@ try {
     // Get and validate HTTP Basic Authentication credentials
     $credentials = $auth->getBasicAuthCredentials();
     
+    // Debug log to help troubleshoot
+    error_log('Authentication attempt: ' . ($credentials ? json_encode($credentials) : 'No credentials'));
+    
     if (!$credentials || !$auth->validateBasicAuth($credentials['username'], $credentials['password'])) {
-        http_response_code(401);
-        echo json_encode([
-            'error' => 'Invalid or missing authentication credentials',
-            'status' => 401,
-            'authentication' => 'HTTP Basic Authentication required'
-        ]);
-        exit();
+        // If Apache is rewriting the URL, try to get credentials from PHP_AUTH_* vars
+        if (isset($_SERVER['PHP_AUTH_USER']) && isset($_SERVER['PHP_AUTH_PW'])) {
+            if ($auth->validateBasicAuth($_SERVER['PHP_AUTH_USER'], $_SERVER['PHP_AUTH_PW'])) {
+                // Valid credentials found in PHP_AUTH_* vars
+                error_log('Authenticated via PHP_AUTH_* variables');
+            } else {
+                http_response_code(401);
+                echo json_encode([
+                    'error' => 'Invalid or missing authentication credentials',
+                    'status' => 401,
+                    'authentication' => 'HTTP Basic Authentication required'
+                ]);
+                exit();
+            }
+        } else {
+            http_response_code(401);
+            echo json_encode([
+                'error' => 'Invalid or missing authentication credentials',
+                'status' => 401,
+                'authentication' => 'HTTP Basic Authentication required'
+            ]);
+            exit();
+        }
     }
     
     // Validate required parameters

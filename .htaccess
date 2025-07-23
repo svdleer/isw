@@ -53,3 +53,18 @@ Header always set X-XSS-Protection "1; mode=block"
 Header always set Access-Control-Allow-Origin "*"
 Header always set Access-Control-Allow-Methods "GET, POST, OPTIONS"
 Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-API-Key"
+
+# Make sure HTTP Authorization header is passed to PHP
+# This is crucial for Basic Authentication to work properly
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+RewriteCond %{HTTP:Authorization} ^(.+)$
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Fix for CGI mode
+<IfModule mod_fcgid.c>
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+</IfModule>
+
+<IfModule mod_fastcgi.c>
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+</IfModule>

