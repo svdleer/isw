@@ -355,8 +355,15 @@ class NetshotAPI {
                 $deviceName = strtoupper($device['name']);
                 $searchName = strtoupper($hostname);
                 
-                // Check if one contains the other
-                if (strpos($deviceName, $searchName) !== false || strpos($searchName, $deviceName) !== false) {
+                // Check if one contains the other, or if there's a match after stripping non-alphanumeric chars
+                $cleanDeviceName = preg_replace('/[^A-Z0-9]/', '', $deviceName);
+                $cleanSearchName = preg_replace('/[^A-Z0-9]/', '', $searchName);
+                
+                if (strpos($deviceName, $searchName) !== false || 
+                    strpos($searchName, $deviceName) !== false ||
+                    strpos($cleanDeviceName, $cleanSearchName) !== false ||
+                    strpos($cleanSearchName, $cleanDeviceName) !== false) {
+                    
                     // Check for CCAP in both names as extra verification
                     if (strpos($deviceName, 'CCAP') !== false && strpos($searchName, 'CCAP') !== false) {
                         error_log("Found fuzzy hostname match: " . $device['name'] . " for query: " . $hostname);
