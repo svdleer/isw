@@ -31,6 +31,22 @@ $apiKey = $_ENV['NETSHOT_API_KEY'] ?? $_ENV['NETSHOT_API_TOKEN'] ?? $_ENV['NETSH
 // Get the group name (default to ACCESS as per your Python code)
 $groupName = $_ENV['NETSHOT_GROUP'] ?? 'ACCESS';
 
+// Check if we should clear the cache
+$clearCache = $_ENV['CLEAR_CACHE'] ?? false;
+if ($clearCache) {
+    echo "Clearing Netshot cache as requested...\n";
+    $cacheDir = __DIR__ . '/cache/netshot';
+    if (is_dir($cacheDir)) {
+        $files = glob($cacheDir . '/*.cache');
+        foreach ($files as $file) {
+            unlink($file);
+        }
+        echo "Cleared " . count($files) . " cache files\n";
+    } else {
+        echo "Cache directory not found\n";
+    }
+}
+
 // Create a function to test different Netshot API URLs
 function testNetshotConnection($url, $apiKey) {
     echo "Testing Netshot API connection to: $url\n";

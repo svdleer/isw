@@ -320,9 +320,14 @@ class NetshotAPI {
                 }
             }
             
-            // First try exact match
+            // First try exact match - handle case conversion to match your Python approach
             foreach ($devices as $device) {
-                if (isset($device['name']) && strtoupper($device['name']) === strtoupper($hostname)) {
+                // Try a few different case variations to handle case sensitivity
+                if (isset($device['name']) && 
+                    (strtoupper($device['name']) === strtoupper($hostname) ||  // Full uppercase comparison
+                     $device['name'] === $hostname ||                          // Exact case comparison
+                     strtolower($device['name']) === strtolower($hostname))    // Full lowercase comparison
+                   ) {
                     error_log("Found exact hostname match in Netshot: " . $device['name']);
                     
                     // Log all fields in the device

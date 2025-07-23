@@ -8,6 +8,7 @@ BASE_URL="${BASE_URL:-http://localhost/isw}"
 AUTH_USER="isw"
 AUTH_PASS="Spyem_OtGheb4"
 NETSHOT_URL="${NETSHOT_URL:-https://netshot.oss.local/api}"
+CLEAR_CACHE=0
 
 # Process command line arguments
 while [[ $# -gt 0 ]]; do
@@ -28,9 +29,13 @@ while [[ $# -gt 0 ]]; do
       NETSHOT_URL="${1#*=}"
       shift
       ;;
+    --clear-cache)
+      CLEAR_CACHE=1
+      shift
+      ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: $0 [--base-url=URL] [--auth-user=USER] [--auth-pass=PASS] [--netshot-url=URL]"
+      echo "Usage: $0 [--base-url=URL] [--auth-user=USER] [--auth-pass=PASS] [--netshot-url=URL] [--clear-cache]"
       exit 1
       ;;
   esac
@@ -90,10 +95,23 @@ api_call "/api/search" "?type=hostname&q=$HOSTNAME_TO_TEST" | jq '.'
 echo -e "\n5. Testing direct Netshot API connection..."
 echo "Connecting directly to: $NETSHOT_URL"
 
+# Clear cache if requested
+if [ $CLEAR_CACHE -eq 1 ]; then
+  echo -e "\nClearing Netshot API cache..."
+  if [ -d "cache/netshot" ]; then
+    rm -rf cache/netshot/*
+    echo "Cache cleared!"
+  else
+    echo "Cache directory not found. No cache to clear."
+  fi
+fi
+
 # Check if jq is installed
 if command -v jq >/dev/null 2>&1; then
   # Use the NETSHOT_URL and export it for the PHP test script
   export NETSHOT_URL
+  # Export clear cache flag
+  export CLEAR_CACHE
   # Run the PHP test script if it exists
   if [ -f "test_netshot_connection.php" ]; then
     echo "Running Netshot connection test script..."
