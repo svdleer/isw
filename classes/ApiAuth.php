@@ -199,6 +199,10 @@ class ApiAuth {
         $abrPattern = '/^[a-zA-Z]{2}\d{2}(abr|dbr|cbr)\d{1,4}$/i';
         $alternativePattern = '/(abr|dbr|cbr)/i';
         
+        // Special pattern for adXX* or ahXX* format (where XX are numbers)
+        $adAhPattern = '/^(ad|ah)\d{2}/i';
+        $matchesAdAhPattern = preg_match($adAhPattern, $hostnameNoWildcards);
+        
         // Also check if it contains ABR/DBR/CBR keywords with wildcards
         $hasWildcard = (strpos($hostname, '*') !== false || strpos($hostname, '%') !== false);
         $containsAbrKeyword = (stripos($hostname, 'abr') !== false || 
@@ -207,11 +211,16 @@ class ApiAuth {
                               
         $isAbrFormat = preg_match($abrPattern, $hostnameNoWildcards) || 
                        preg_match($alternativePattern, $hostnameNoWildcards) ||
-                       ($hasWildcard && $containsAbrKeyword);
+                       ($hasWildcard && $containsAbrKeyword) ||
+                       $matchesAdAhPattern;
         
-        // For ABR/DBR/CBR format, handle wildcards properly
+        // For ABR/DBR/CBR format or adXX/ahXX pattern, handle wildcards properly
         if ($isAbrFormat) {
-            error_log("ApiAuth: ABR/DBR/CBR format detected in prepareHostnameQuery - " . $hostname);
+            if ($matchesAdAhPattern) {
+                error_log("ApiAuth: adXX/ahXX pattern detected in prepareHostnameQuery - " . $hostname);
+            } else {
+                error_log("ApiAuth: ABR/DBR/CBR format detected in prepareHostnameQuery - " . $hostname);
+            }
             // Convert * to % for SQL LIKE pattern
             return str_replace('*', '%', $hostname);
         }

@@ -283,6 +283,18 @@ try {
                                   stripos($originalQuery, 'dbr') !== false || 
                                   stripos($originalQuery, 'cbr') !== false);
             
+            // Additional pattern for adXX* or ahXX* format (where XX are numbers)
+            // This pattern specifically detects "ad32*" style hostnames that shouldn't have CCAP added
+            $adAhPattern = '/^(ad|ah)\d{2}/i';
+            $matchesAdAhPattern = preg_match($adAhPattern, $queryForDetection);
+            
+            // Log the detection of this special pattern
+            if ($matchesAdAhPattern) {
+                error_log("Special adXX/ahXX pattern detected in hostname: " . $originalQuery);
+                // Explicitly set the adXX/ahXX pattern as ABR format to prevent CCAP addition
+                $isAbrFormat = true;
+            }
+            
             if (preg_match($abrPattern, $queryForDetection) || 
                 preg_match($alternativePattern, $queryForDetection) || 
                 ($hasWildcard && $containsAbrKeyword)) {
@@ -316,9 +328,15 @@ try {
                 error_log("Wildcard search converted to return all CCAP devices: " . $searchQuery);
             } 
             
-            // For ABR/DBR/CBR format, don't force CCAP in the search criteria
+            // For ABR/DBR/CBR format or adXX/ahXX pattern, don't force CCAP in the search criteria
             if ($isAbrFormat) {
-                error_log("ABR/DBR/CBR format detected - not adding CCAP to search query");
+                error_log("Special format detected (ABR/DBR/CBR or adXX/ahXX) - not adding CCAP to search query");
+                
+                // If it's specifically an adXX/ahXX pattern, ensure we're using a clear log message
+                if ($matchesAdAhPattern) {
+                    error_log("adXX/ahXX pattern detected - CCAP will NOT be added to: " . $searchQuery);
+                }
+                
                 // No need to modify searchQuery here as the SQL will be constructed directly using the original query
             }
             // For normal searches, always make sure CCAP is part of the search criteria
@@ -333,6 +351,10 @@ try {
             
             // Log the final search query for debugging
             error_log("Final hostname search query: " . $searchQuery);
+            error_log("Query classification summary - Original: " . $originalQuery . 
+                      ", isAbrFormat: " . ($isAbrFormat ? "Yes" : "No") . 
+                      ", matchesAdAhPattern: " . ($matchesAdAhPattern ? "Yes" : "No") . 
+                      ", containsCCAP: " . (stripos($searchQuery, 'CCAP') !== false ? "Yes" : "No"));
             
             // Performance optimization for *CCAP* searches - use a direct index
             $isAllCcapSearch = (strtoupper($searchQuery) === '%CCAP%' || $query === '*CCAP*');
@@ -350,6 +372,10 @@ try {
                 // Handle wildcards in the query
                 $hasWildcard = (strpos($originalQuery, '*') !== false || strpos($originalQuery, '%') !== false);
                 $searchPattern = $hasWildcard ? str_replace(['*', '%'], ['%', '%'], $escapedOriginalQuery) : "%$escapedOriginalQuery%";
+                
+                // Debug logs for ABR search pattern
+                error_log("ABR/DBR/CBR search pattern: " . $searchPattern);
+                error_log("Original escapedSearchQuery: " . $escapedSearchQuery);
                 
                 // Exact format from user example, but handle wildcards properly
                 $sql = "SELECT UPPER(a.hostname) as hostname FROM access.devicesnew a LEFT JOIN reporting.acc_alias b ON a.hostname = b.ccap_name WHERE (a.hostname LIKE '$searchPattern' OR b.alias LIKE '$searchPattern') AND a.active = 1 ORDER BY a.hostname";

@@ -413,6 +413,13 @@ class NetshotAPI {
             return $hostname;
         }
         
+        // Additional pattern for adXX* or ahXX* format (where XX are numbers)
+        $adAhPattern = '/^(ad|ah)\d{2}/i';
+        if (preg_match($adAhPattern, $hostname)) {
+            error_log("adXX/ahXX pattern detected in NetshotAPI: " . $hostname . " - skipping CCAP mapping");
+            return $hostname;
+        }
+        
         // Check for ABR/DBR/CBR pattern - more flexible to match various formats
         $abrPattern = '/^[a-zA-Z]{2}\d{2}(abr|dbr|cbr)\d{1,4}$/i';
         $alternativePattern = '/(abr|dbr|cbr)/i';
