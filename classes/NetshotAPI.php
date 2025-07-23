@@ -149,18 +149,49 @@ class NetshotAPI {
      * @return array Matching devices
      */
     public function searchDevicesByIp($ipPattern) {
-        // Convert SQL LIKE pattern to regex
-        $regexPattern = $this->patternToRegex($ipPattern);
-        $devices = $this->getDevicesInGroup();
-        
-        // Filter devices by IP
-        return array_filter($devices, function($device) use ($regexPattern) {
-            if (!isset($device['mgmtIp'])) {
-                return false;
+        try {
+            // Check cache first
+            $cacheKey = "search_ip_" . $ipPattern;
+            $cachedResult = $this->getFromCache($cacheKey);
+            if ($cachedResult !== false) {
+                error_log("Using cached IP wildcard search results for: " . $ipPattern);
+                return $cachedResult;
             }
             
-            return preg_match($regexPattern, $device['mgmtIp']);
-        });
+            // Convert SQL LIKE pattern to regex
+            $regexPattern = $this->patternToRegex($ipPattern);
+            $devices = $this->getDevicesInGroup();
+            
+            error_log("Searching devices with IP pattern: " . $ipPattern . " (regex: " . $regexPattern . ")");
+            
+            // Filter devices by IP
+            $results = [];
+            foreach ($devices as $device) {
+                if (!isset($device['mgmtIp'])) {
+                    continue;
+                }
+                
+                if (preg_match($regexPattern, $device['mgmtIp'])) {
+                    $results[] = [
+                        'id' => $device['id'] ?? null,
+                        'name' => $device['name'] ?? null,
+                        'ip' => $device['mgmtIp'] ?? '',
+                        'model' => $device['family'] ?? null,
+                        'vendor' => $device['domain'] ?? null,
+                        'status' => $device['status'] ?? null
+                    ];
+                }
+            }
+            
+            error_log("Found " . count($results) . " matching devices for IP pattern: " . $ipPattern);
+            
+            // Save to cache
+            $this->saveToCache($cacheKey, $results);
+            return $results;
+        } catch (Exception $e) {
+            error_log("Error in searchDevicesByIp: " . $e->getMessage());
+            return [];
+        }
     }
     
     /**
@@ -245,6 +276,43 @@ class NetshotAPI {
         } catch (Exception $e) {
             error_log("Error in getDeviceByIP: " . $e->getMessage());
             return null;
+        }
+    }
+    
+    /**
+     * Get device hostnames by IP address
+     * 
+     * @param string $ipAddress The IP address to search for
+     * @return array List of hostnames associated with this IP
+     */
+    public function getDeviceNamesByIP($ipAddress) {
+        try {
+            // Check cache first
+            $cacheKey = "device_names_ip_" . $ipAddress;
+            $cachedResult = $this->getFromCache($cacheKey);
+            if ($cachedResult !== false) {
+                error_log("Using cached hostname results for IP: " . $ipAddress);
+                return $cachedResult;
+            }
+            
+            error_log("Looking up hostnames for IP: " . $ipAddress);
+            $devices = $this->getDevicesInGroup();
+            $hostnames = [];
+            
+            foreach ($devices as $device) {
+                if (isset($device['mgmtIp']) && $device['mgmtIp'] === $ipAddress) {
+                    if (isset($device['name']) && !empty($device['name'])) {
+                        $hostnames[] = $device['name'];
+                    }
+                }
+            }
+            
+            // Save to cache
+            $this->saveToCache($cacheKey, $hostnames);
+            return $hostnames;
+        } catch (Exception $e) {
+            error_log("Error in getDeviceNamesByIP: " . $e->getMessage());
+            return [];
         }
     }
     

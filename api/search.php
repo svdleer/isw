@@ -232,8 +232,8 @@ try {
             // Always convert to wildcard format for consistency
             $searchQuery = str_replace('*', '%', $searchQuery);
             
-            // Query that gets only active devices 
-            $sql = "SELECT a.hostname, a.ipaddress as ip_address, a.description, 
+            // Query that gets only active devices - using only hostname/alias fields
+            $sql = "SELECT a.hostname, '' as ip_address, a.description, 
                    a.created_at, a.updated_at, a.location
                    FROM access.devicesnew a 
                    LEFT JOIN reporting.acc_alias b ON UPPER(a.hostname) = UPPER(b.ccap_name)
@@ -263,56 +263,79 @@ try {
                 exit();
             }
             
-            // Prepare query for database
+            // Prepare query
             $searchQuery = $auth->prepareIpQuery($query);
+            $results = [];
             
-            // SQL query for IP search - only return active devices
-            if (strpos($searchQuery, '%') !== false) {
-                // Wildcard search
-                $sql = "SELECT a.hostname, a.ipaddress as ip_address, a.description,
-                       a.created_at, a.updated_at, a.location
-                       FROM access.devicesnew a
-                       WHERE a.ipaddress LIKE ? 
-                       AND a.active = 1
-                       ORDER BY a.ipaddress";
-                $results = $db->query($sql, [$searchQuery]);
-            } else {
-                // Exact search
-                $sql = "SELECT a.hostname, a.ipaddress as ip_address, a.description,
-                       a.created_at, a.updated_at, a.location
-                       FROM access.devicesnew a
-                       WHERE a.ipaddress = ? 
-                       AND a.active = 1
-                       ORDER BY a.ipaddress";
-                $results = $db->query($sql, [$searchQuery]);
-                
-                // Check Netshot API for additional device information
+            // For exact IP search, use Netshot API directly
+            if (strpos($searchQuery, '%') === false) {
+                error_log("Performing exact IP lookup in Netshot for: " . $searchQuery);
                 try {
-                    error_log("Looking up IP " . $searchQuery . " in Netshot");
                     $netshotDevice = $netshot->getDeviceByIP($searchQuery);
                     if ($netshotDevice) {
                         error_log("Device found in Netshot: " . ($netshotDevice['name'] ?? 'unknown'));
-                        // If we have results from our database, enhance them with Netshot data
-                        if (!empty($results)) {
-                            foreach ($results as &$device) {
-                                $device['netshot'] = $netshotDevice;
-                            }
-                        } 
-                        // If no results from our database, but device found in Netshot
-                        else {
-                            $results[] = [
-                                'hostname' => $netshotDevice['name'] ?? 'Unknown',
-                                'ip_address' => $searchQuery,
-                                'description' => 'Device found in Netshot',
-                                'netshot' => $netshotDevice
-                            ];
-                        }
+                        // Create a result entry with Netshot data
+                        $results[] = [
+                            'hostname' => $netshotDevice['name'] ?? 'Unknown',
+                            'ip_address' => $searchQuery,
+                            'description' => 'Device found in Netshot',
+                            'netshot' => $netshotDevice
+                        ];
                     } else {
                         error_log("No device found in Netshot for IP: " . $searchQuery);
+                        
+                        // Instead of direct IP lookup in database, try to find the device by hostname
+                        // This is a workaround since we can't query by IP address directly
+                        error_log("Attempting to find device by hostname lookup");
+                        $hostnameResults = $netshot->getDeviceNamesByIP($searchQuery);
+                        
+                        if (!empty($hostnameResults)) {
+                            foreach ($hostnameResults as $hostname) {
+                                // For each hostname found, do a hostname search in our database
+                                $sql = "SELECT a.hostname, a.description, a.created_at, a.updated_at, a.location
+                                       FROM access.devicesnew a 
+                                       WHERE UPPER(a.hostname) = UPPER(?)
+                                       AND a.active = 1";
+                                $dbResults = $db->query($sql, [$hostname]);
+                                
+                                if (!empty($dbResults)) {
+                                    foreach ($dbResults as $dbDevice) {
+                                        $dbDevice['ip_address'] = $searchQuery; // Add the IP we searched for
+                                        $results[] = $dbDevice;
+                                    }
+                                }
+                            }
+                        }
                     }
                 } catch (Exception $e) {
                     // Log the error but don't interrupt the response
                     error_log("Error querying Netshot API: " . $e->getMessage());
+                }
+            } else {
+                // For wildcard searches, use Netshot only
+                error_log("Performing wildcard IP lookup in Netshot for: " . $searchQuery);
+                try {
+                    $netshotDevices = $netshot->searchDevicesByIp($searchQuery);
+                    if (!empty($netshotDevices)) {
+                        foreach ($netshotDevices as $device) {
+                            $results[] = [
+                                'hostname' => $device['name'] ?? 'Unknown',
+                                'ip_address' => $device['ip'] ?? $searchQuery,
+                                'description' => 'Device found in Netshot',
+                                'netshot' => [
+                                    'id' => $device['id'] ?? null,
+                                    'name' => $device['name'] ?? null,
+                                    'ip' => $device['ip'] ?? null,
+                                    'model' => $device['model'] ?? null,
+                                    'vendor' => $device['vendor'] ?? null,
+                                    'status' => $device['status'] ?? null
+                                ]
+                            ];
+                        }
+                    }
+                } catch (Exception $e) {
+                    // Log the error but don't interrupt the response
+                    error_log("Error querying Netshot API for wildcard search: " . $e->getMessage());
                 }
             }
             break;
@@ -349,9 +372,21 @@ try {
     echo json_encode($responseData);
     
 } catch (Exception $e) {
+    $errorMessage = 'Internal server error: ' . $e->getMessage();
+    error_log($errorMessage);
+    
+    // Include more debug info in development environments
+    $debug = [];
+    if (isset($_SERVER['HTTP_HOST']) && $_SERVER['HTTP_HOST'] === 'localhost') {
+        $debug['trace'] = $e->getTraceAsString();
+        $debug['file'] = $e->getFile();
+        $debug['line'] = $e->getLine();
+    }
+    
     http_response_code(500);
     echo json_encode([
-        'error' => 'Internal server error: ' . $e->getMessage(),
-        'status' => 500
+        'error' => $errorMessage,
+        'status' => 500,
+        'debug' => $debug
     ]);
 }
