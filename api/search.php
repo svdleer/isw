@@ -305,12 +305,13 @@ try {
                 error_log("Error running diagnostic queries: " . $e->getMessage());
             }
             
-            // Fixed SQL query based on provided example
+            // Updated SQL query based on actual database structure
+            // Not using loopbackip since it's not useful
             $sql = "SELECT 
                    a.hostname
                    FROM access.devicesnew a 
-                   LEFT JOIN reporting.acc_alias b ON UPPER(a.hostname) = UPPER(b.ccap_name)
-                   WHERE (UPPER(a.hostname) LIKE UPPER(?) OR UPPER(COALESCE(b.alias, '')) LIKE UPPER(?))
+                   LEFT JOIN reporting.acc_alias b ON a.hostname = b.ccap_name
+                   WHERE (a.hostname LIKE ? OR b.alias LIKE ?)
                    AND a.active = 1
                    ORDER BY a.hostname";
             
@@ -323,14 +324,18 @@ try {
             // Log the number of results found
             error_log("Database query returned " . count($dbResults) . " results for hostname search: " . $searchQuery);
             
-            // For each hostname found, check Netshot for IP address
+            // For each hostname found, use the loopbackip field or check Netshot
             $results = [];
             foreach ($dbResults as $device) {
                 $hostname = $device['hostname'];
-                $deviceWithIp = ['hostname' => $hostname, 'ip_address' => ''];
+                // Initialize with empty IP address, we'll get it from Netshot or generate it
+                $deviceWithIp = [
+                    'hostname' => $hostname, 
+                    'ip_address' => ''
+                ];
                 
-                // Try to find IP in Netshot by hostname
-                error_log("Looking up IP for hostname in Netshot: " . $hostname);
+                // Try to find info in Netshot by hostname to get the IP address
+                error_log("Looking up hostname in Netshot: " . $hostname);
                 $netshotDevice = $netshot->getDeviceByHostname($hostname);
                 
                 // Log the full Netshot device object for debugging
@@ -472,8 +477,10 @@ try {
                     } else {
                         error_log("No device found in Netshot for IP: " . $searchQuery);
                         
-                        // Instead of direct IP lookup in database, try to find the device by hostname
-                        // This is a workaround since we can't query by IP address directly
+                        // Not using database loopbackip field as it's not useful
+                        error_log("Skipping database loopbackip lookup as it's not useful. Relying on Netshot and fallback algorithm.");
+                        
+                        // We'll rely completely on Netshot or fallback algorithm for IP address information
                         error_log("Attempting to find device by hostname lookup");
                         $hostnameResults = $netshot->getDeviceNamesByIP($searchQuery);
                         
@@ -502,8 +509,14 @@ try {
                     error_log("Error querying Netshot API: " . $e->getMessage());
                 }
             } else {
-                // For wildcard searches, use Netshot only
-                error_log("Performing wildcard IP lookup in Netshot for: " . $searchQuery);
+                // For wildcard searches, only use Netshot
+                error_log("Performing wildcard IP lookup for: " . $searchQuery);
+                
+                // Not using database loopbackip field as it's not useful
+                error_log("Skipping database loopbackip wildcard lookup as it's not useful. Relying only on Netshot.");
+                
+                // Then, also check Netshot for additional results
+                error_log("Also checking Netshot for wildcard IP: " . $searchQuery);
                 try {
                     $netshotDevices = $netshot->searchDevicesByIp($searchQuery);
                     if (!empty($netshotDevices)) {
@@ -546,6 +559,7 @@ try {
     
     // Process all search results
     $processedResults = [];
+    $uniqueHostnames = []; // Track unique hostnames to avoid duplicates
     
     if (!empty($results)) {
         error_log("Found " . count($results) . " results for query: " . $query);
@@ -554,6 +568,13 @@ try {
         foreach ($results as $result) {
             $hostname = strtolower($result['hostname'] ?? '');
             $ipAddress = '';
+            
+            // Skip duplicate hostnames (we might get the same device from both database and Netshot)
+            if (in_array($hostname, $uniqueHostnames)) {
+                error_log("Skipping duplicate hostname: " . $hostname);
+                continue;
+            }
+            $uniqueHostnames[] = $hostname;
             
             // Check if IP address is a complex object and extract just the IP string if needed
             if (isset($result['ip_address'])) {

@@ -89,7 +89,7 @@ The API looks for IP addresses in Netshot devices using the following field name
 - `address`
 - `primaryIp`
 
-If none of these fields contain a valid IP address, the system will fall back to generating an IP address algorithmically based on the hostname pattern.
+If none of these fields contain a valid IP address, the system will fall back to generating an IP address algorithmically based on the hostname pattern. Note that the database loopbackip field is not used as it typically contains outdated or unreliable information.
 
 ## Caching
 
