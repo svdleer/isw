@@ -183,17 +183,25 @@ class ApiAuth {
             return '%';
         }
         
+        // Check for ABR/DBR/CBR pattern
+        $abrPattern = '/^[a-zA-Z]{2}\d{2}(abr|dbr|cbr)\d{1,4}$/i';
+        $alternativePattern = '/(abr|dbr|cbr)/i';
+        $isAbrFormat = preg_match($abrPattern, $hostname) || preg_match($alternativePattern, $hostname);
+        
         // Convert search patterns to SQL LIKE patterns
         $hostname = str_replace('*', '%', $hostname);
         
-        // Ensure CCAP is part of the query if not already present
-        if (stripos($hostname, 'CCAP') === false) {
+        // For ABR/DBR/CBR hostnames, don't add CCAP prefix
+        if (!$isAbrFormat && stripos($hostname, 'CCAP') === false) {
             $hostname = '%CCAP%' . $hostname;
         }
         
         // If no wildcards are present, add them for partial matching
         if (strpos($hostname, '%') === false) {
-            $hostname = '%' . $hostname . '%';
+            // For ABR/DBR/CBR, don't add wildcards if we want exact matches
+            if (!$isAbrFormat) {
+                $hostname = '%' . $hostname . '%';
+            }
         }
         
         return $hostname;

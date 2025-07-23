@@ -273,9 +273,11 @@ try {
             $originalQuery = $query;
             $abrPattern = '/^[a-zA-Z]{2}\d{2}(abr|dbr|cbr)\d{1,4}$/i';
             $alternativePattern = '/(abr|dbr|cbr)/i';
+            $isAbrFormat = false;
             
             if (preg_match($abrPattern, $originalQuery) || preg_match($alternativePattern, $originalQuery)) {
                 error_log("ABR/DBR/CBR format hostname detected: " . $originalQuery);
+                $isAbrFormat = true;
                 
                 // Map ABR/DBR/CBR hostname to CCAP hostname using NetshotAPI's method
                 $mappedHostname = $netshot->mapAbrToCcapHostname($originalQuery);
@@ -298,8 +300,12 @@ try {
                 error_log("Wildcard search converted to return all CCAP devices: " . $searchQuery);
             } 
             
-            // Always make sure CCAP is part of the search criteria
-            if (stripos($searchQuery, 'CCAP') === false) {
+            // For ABR/DBR/CBR format, don't force CCAP in the search criteria
+            if ($isAbrFormat) {
+                error_log("ABR/DBR/CBR format detected - not adding CCAP to search query");
+            }
+            // For normal searches, always make sure CCAP is part of the search criteria
+            else if (stripos($searchQuery, 'CCAP') === false) {
                 // Force CCAP to be included in all hostname searches
                 $searchQuery = '%CCAP%' . $searchQuery;
                 error_log("Added CCAP to query: " . $searchQuery);
@@ -318,9 +324,24 @@ try {
             // Updated SQL query based on actual database structure with direct string interpolation
             // Not using loopbackip since it's not useful
             $escapedSearchQuery = str_replace("'", "''", $searchQuery); // Basic SQL escaping for the LIKE clause
+            $escapedOriginalQuery = str_replace("'", "''", strtoupper($originalQuery)); // Original query for ABR searches
             
+            // Special case for ABR/DBR/CBR format
+            if ($isAbrFormat) {
+                error_log("Using ABR/DBR/CBR optimized query for: " . $escapedOriginalQuery);
+                $sql = "SELECT 
+                       UPPER(a.hostname) as hostname
+                       FROM access.devicesnew a 
+                       JOIN reporting.acc_alias b ON a.hostname = b.ccap_name
+                       WHERE b.alias = '$escapedOriginalQuery'
+                       AND a.active = 1
+                       ORDER BY a.hostname";
+                       
+                // Log what we expect to see in the database
+                error_log("Looking for alias entry where alias = '$escapedOriginalQuery' and mapped to a CCAP device");
+            }
             // Optimize queries for common *CCAP* case
-            if ($isAllCcapSearch) {
+            else if ($isAllCcapSearch) {
                 // Use a more efficient query when looking for all CCAP devices
                 $sql = "SELECT 
                        UPPER(hostname) as hostname
@@ -345,6 +366,27 @@ try {
             
             // Log the number of results found
             error_log("Database query returned " . count($dbResults) . " results for hostname search: " . $searchQuery);
+            
+            // Special case for ABR/DBR/CBR - try direct Netshot lookup if no database results
+            if ($isAbrFormat && empty($dbResults)) {
+                error_log("No results from database for ABR/DBR/CBR format. Trying direct Netshot lookup for: " . $originalQuery);
+                
+                // Try to get the device directly from Netshot
+                $netshotDevice = $netshot->getDeviceByHostname($originalQuery, false);
+                
+                if ($netshotDevice) {
+                    error_log("Found direct match in Netshot for ABR/DBR/CBR hostname: " . $originalQuery);
+                    
+                    // Add to dbResults so it gets processed later
+                    $dbResults[] = [
+                        'hostname' => $netshotDevice['name'] ?? $originalQuery
+                    ];
+                    
+                    error_log("Added Netshot direct result to dbResults for: " . $originalQuery);
+                } else {
+                    error_log("No direct match found in Netshot for ABR/DBR/CBR hostname: " . $originalQuery);
+                }
+            }
             
             // Process each device from the database first without Netshot to avoid delay
             $results = [];
