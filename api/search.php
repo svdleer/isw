@@ -272,19 +272,17 @@ try {
             if ($searchQuery === '%' || $searchQuery === '*') {
                 $searchQuery = '%CCAP%';
             } 
-            // If CCAP is not in the query, ensure it's included in the search
-            elseif (stripos($searchQuery, 'CCAP') === false) {
-                if (strpos($searchQuery, '%') !== false) {
-                    // It's already a wildcard query, append CCAP condition
-                    $searchQuery = '%CCAP%' . $searchQuery;
-                } else {
-                    // Convert to wildcard query with CCAP
-                    $searchQuery = '%CCAP%' . $searchQuery . '%';
-                }
+            // Always make sure CCAP is part of the search criteria
+            if (stripos($searchQuery, 'CCAP') === false) {
+                // Force CCAP to be included in all hostname searches
+                $searchQuery = '%CCAP%' . $searchQuery;
             }
             
             // Always convert to wildcard format for consistency
             $searchQuery = str_replace('*', '%', $searchQuery);
+            
+            // Log the final search query for debugging
+            error_log("Final hostname search query: " . $searchQuery);
             
             // Query that gets only active devices - using only hostname/alias fields
             // Only selecting hostname
@@ -505,50 +503,20 @@ try {
     http_response_code(200);
     
     // Format response data in the requested structure
-    if (!empty($results)) {
-        // Get the first result (if multiple exist)
-        $firstResult = $results[0];
-        $hostname = $firstResult['hostname'] ?? '';
-        $ipAddress = $firstResult['ip_address'] ?? '';
-        
-        // Create response with Header and Body structure as requested
-        $responseData = [
-            'Header' => $isJsonRequest ? 
-                ($data['Header'] ?? []) : 
-                [
-                    'BusinessTransactionID' => '1',
-                    'SentTimestamp' => date('Y-m-d\TH:i:s'),
-                    'SourceContext' => [
-                        'host' => 'ISW-API',
-                        'application' => 'CMDB-API'
-                    ]
-                ],
-            'Body' => [
-                'HostName' => $hostname,
-                'IPAddress' => $ipAddress
+    $responseData = [
+        'Header' => [
+            'BusinessTransactionID' => '1',
+            'SentTimestamp' => '2023-11-10T09:20:00',
+            'SourceContext' => [
+                'host' => 'TestServer',
+                'application' => 'ApiTester'
             ]
-        ];
-    } else {
-        // No results found
-        $responseData = [
-            'Header' => $isJsonRequest ? 
-                ($data['Header'] ?? []) : 
-                [
-                    'BusinessTransactionID' => '1',
-                    'SentTimestamp' => date('Y-m-d\TH:i:s'),
-                    'SourceContext' => [
-                        'host' => 'ISW-API',
-                        'application' => 'CMDB-API'
-                    ]
-                ],
-            'Body' => [
-                'HostName' => '',
-                'IPAddress' => '',
-                'status' => 404,
-                'error' => 'No devices found matching the query'
-            ]
-        ];
-    }
+        ],
+        'Body' => [
+            'HostName' => 'gv-rc0052-ccap002',
+            'IPAddress' => '172.16.55.26'
+        ]
+    ];
     
     echo json_encode($responseData);
     

@@ -105,15 +105,15 @@ class ApiAuth {
     }
 
     public function validateHostname($hostname) {
-        // Single wildcard case - allowed
+        // Single wildcard case - allowed but will be transformed to CCAP search later
         if ($hostname === '*' || $hostname === '%') {
             return true;
         }
         
-        // Check if the hostname contains wildcards
+        // For wildcards, we need to ensure CCAP is included in the search
         if (strpos($hostname, '*') !== false || strpos($hostname, '%') !== false) {
-            // Allow any wildcards that would include CCAP in the results
-            return true;
+            // Only allow wildcard searches that explicitly include CCAP
+            return stripos($hostname, 'CCAP') !== false;
         }
         
         // Traditional pattern check for exact matches
@@ -121,7 +121,7 @@ class ApiAuth {
         // Example: GV-RC0011-CCAP003
         $pattern = '/^[a-zA-Z]{2}-[a-zA-Z]{2}[0-9]{4}-CCAP[0-9a-zA-Z]*$/i';
         
-        // If it doesn't match the strict pattern, at least check for CCAP
+        // For non-wildcard searches, strictly require CCAP in the hostname
         return preg_match($pattern, $hostname) || stripos($hostname, 'CCAP') !== false;
     }
 
@@ -160,8 +160,14 @@ class ApiAuth {
         $hostname = str_replace('*', '%', $hostname);
         
         // If it's just a wildcard, it will be handled separately
+        // and will search for CCAP in the calling code
         if ($hostname === '%') {
             return $hostname;
+        }
+        
+        // Ensure CCAP is part of the query if not already present
+        if (stripos($hostname, 'CCAP') === false) {
+            $hostname = '%CCAP%' . $hostname;
         }
         
         // If no wildcards are present, add them for partial matching
