@@ -234,7 +234,7 @@ try {
             
             // Query that gets only active devices - using only hostname/alias fields
             $sql = "SELECT a.hostname, '' as ip_address, 
-                   FROM access.devicesnew a 
+                   FROM access.devicesnew  
                    LEFT JOIN reporting.acc_alias b ON UPPER(a.hostname) = UPPER(b.ccap_name)
                    WHERE (UPPER(a.hostname) LIKE UPPER(?) OR UPPER(b.alias) LIKE UPPER(?))
                    AND a.active = 1
