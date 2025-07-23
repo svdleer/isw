@@ -124,6 +124,13 @@ class ApiAuth {
             return true;
         }
         
+        // Check for ABR/DBR/CBR pattern - now accepting these formats
+        $abrPattern = '/^[a-zA-Z]{2}\d{2}(abr|dbr|cbr)\d{4}$/i';
+        if (preg_match($abrPattern, $hostname)) {
+            error_log("Accepting ABR/DBR/CBR format hostname: " . $hostname);
+            return true;
+        }
+        
         // Traditional pattern check for exact matches
         // Pattern: 4char-2char4num-CCAPxxx
         // Example: GV-RC0011-CCAP003

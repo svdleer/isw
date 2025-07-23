@@ -257,8 +257,9 @@ try {
             if (!$auth->validateHostname($query)) {
                 http_response_code(400);
                 echo json_encode([
-                    'error' => 'Invalid hostname format. Expected: ^[a-zA-Z]{2,4}-(RC|LC)0\d{3}-CCAP[1-6]0[0-9]$ or * for wildcard',
+                    'error' => 'Invalid hostname format. Expected: CCAP device format (GV-RC0011-CCAP003), ABR/DBR/CBR format (ah00cbr67), or * for wildcard',
                     'example' => 'GV-RC0011-CCAP003',
+                    'abr_example' => 'ah00cbr67',
                     'wildcard_example' => 'CCAP*',
                     'status' => 400
                 ]);
@@ -267,6 +268,23 @@ try {
             
             // Debug the original query
             error_log("Original hostname query: " . $query);
+            
+            // Check if this is an ABR/DBR/CBR hostname and try to map it to a CCAP hostname
+            $originalQuery = $query;
+            $abrPattern = '/^[a-zA-Z]{2}\d{2}(abr|dbr|cbr)\d{4}$/i';
+            if (preg_match($abrPattern, $originalQuery)) {
+                error_log("ABR/DBR/CBR format hostname detected: " . $originalQuery);
+                
+                // Map ABR/DBR/CBR hostname to CCAP hostname using NetshotAPI's method
+                $mappedHostname = $netshot->mapAbrToCcapHostname($originalQuery);
+                
+                if ($mappedHostname !== $originalQuery) {
+                    error_log("Mapped ABR/DBR/CBR hostname $originalQuery to CCAP: $mappedHostname");
+                    $query = $mappedHostname;
+                } else {
+                    error_log("No CCAP mapping found for ABR/DBR/CBR hostname: $originalQuery");
+                }
+            }
             
             // Prepare query for database
             $searchQuery = $auth->prepareHostnameQuery($query);
