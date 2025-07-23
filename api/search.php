@@ -384,7 +384,7 @@ try {
                 
                 // FALLBACK: If we didn't find an IP in Netshot, try to generate one from the hostname
                 if (empty($deviceWithIp['ip_address'])) {
-                    $ipAddress = $this->generateIpFromHostname($hostname);
+                    $ipAddress = generateIpFromHostname($hostname);
                     if ($ipAddress) {
                         $deviceWithIp['ip_address'] = $ipAddress;
                         $deviceWithIp['_note'] = "IP address is algorithmically generated from hostname";
