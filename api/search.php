@@ -341,9 +341,17 @@ try {
             }
             // For normal searches, always make sure CCAP is part of the search criteria
             else if (stripos($searchQuery, 'CCAP') === false) {
-                // Force CCAP to be included in all hostname searches
-                $searchQuery = '%CCAP%' . $searchQuery;
-                error_log("Added CCAP to query: " . $searchQuery);
+                // Check if the query already has wildcards
+                if (strpos($searchQuery, '%') !== false) {
+                    // For queries that already have wildcards, insert CCAP in the middle
+                    // instead of prepending it to avoid the wrong positioning
+                    $searchQuery = str_replace('%', '%CCAP%', $searchQuery, 1);
+                    error_log("Added CCAP to wildcard query: " . $searchQuery);
+                } else {
+                    // If no wildcards, ensure we're searching for CCAP as part of the hostname
+                    $searchQuery = '%CCAP%' . $searchQuery;
+                    error_log("Added CCAP to beginning of query: " . $searchQuery);
+                }
             }
             
             // Always convert to wildcard format for consistency
@@ -355,6 +363,14 @@ try {
                       ", isAbrFormat: " . ($isAbrFormat ? "Yes" : "No") . 
                       ", matchesAdAhPattern: " . ($matchesAdAhPattern ? "Yes" : "No") . 
                       ", containsCCAP: " . (stripos($searchQuery, 'CCAP') !== false ? "Yes" : "No"));
+                      
+            // Extra debugging for final query structure
+            $wildcardPositions = [];
+            $position = -1;
+            while (($position = strpos($searchQuery, '%', $position + 1)) !== false) {
+                $wildcardPositions[] = $position;
+            }
+            error_log("Wildcard positions in final query: " . implode(", ", $wildcardPositions));
             
             // Performance optimization for *CCAP* searches - use a direct index
             $isAllCcapSearch = (strtoupper($searchQuery) === '%CCAP%' || $query === '*CCAP*');
@@ -364,6 +380,10 @@ try {
             // Not using loopbackip since it's not useful
             $escapedSearchQuery = str_replace("'", "''", $searchQuery); // Basic SQL escaping for the LIKE clause
             $escapedOriginalQuery = str_replace("'", "''", strtoupper($originalQuery)); // Original query for ABR searches
+            
+            // Debug the exact SQL pattern that will be used
+            error_log("SQL pattern will be: " . $escapedSearchQuery);
+            error_log("SQL pattern decoded: " . str_replace('%', '[WILDCARD]', $escapedSearchQuery));
             
             // Special case for ABR/DBR/CBR format
             if ($isAbrFormat) {
@@ -403,7 +423,8 @@ try {
             }
             
             // Debug: Log the SQL query with interpolated parameters
-            error_log("Executing SQL query with interpolated parameters: " . $sql);
+            error_log("Executing SQL: " . $sql);
+            error_log("SQL with params: " . str_replace(['%', "'"], ['%%', "''"], $sql));
             
             $dbResults = $db->query($sql);
             
