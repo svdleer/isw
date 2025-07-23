@@ -116,7 +116,29 @@ class NetshotAPI {
      * @param int|string|null $groupParam Optional override for the group ID/name to fetch devices from
      * @return array Devices in the specified group
      */
-    public function getDevicesInGroup($groupParam = null) {
+    /**
+     * Filter devices to only include those with INPRODUCTION status
+     * 
+     * @param array $devices Array of devices to filter
+     * @return array Filtered devices
+     */
+    private function filterInProductionDevices($devices) {
+        $filtered = array_filter($devices, function($device) {
+            return isset($device['status']) && $device['status'] === 'INPRODUCTION';
+        });
+        
+        error_log("Filtered " . count($devices) . " devices to " . count($filtered) . " INPRODUCTION devices");
+        return $filtered;
+    }
+    
+    /**
+     * Get devices from a specific group
+     * 
+     * @param int|string|null $groupParam Optional override for the group ID/name to fetch devices from
+     * @param bool $onlyInProduction Whether to filter for only INPRODUCTION devices (default: true)
+     * @return array Devices in the specified group
+     */
+    public function getDevicesInGroup($groupParam = null, $onlyInProduction = true) {
         // Use parameter if provided, otherwise use the class property
         $group = $groupParam !== null ? $groupParam : $this->group;
         $groupQueryParam = '';
@@ -168,7 +190,10 @@ class NetshotAPI {
             $result = json_decode($response, true) ?: [];
             error_log("Retrieved " . count($result) . " devices from Netshot using {$groupQueryParam}");
             
-            // Return the result directly without caching
+            // Filter for INPRODUCTION devices if requested
+            if ($onlyInProduction) {
+                $result = $this->filterInProductionDevices($result);
+            }
             
             return $result;
         } catch (Exception $e) {
@@ -199,12 +224,9 @@ class NetshotAPI {
             
             // Convert SQL LIKE pattern to regex
             $regexPattern = $this->patternToRegex($ipPattern);
-            $devices = $this->getDevicesInGroup();
             
-            // Filter devices to only include INPRODUCTION status
-            $devices = array_filter($devices, function($device) {
-                return isset($device['status']) && $device['status'] === 'INPRODUCTION';
-            });
+            // Get only INPRODUCTION devices
+            $devices = $this->getDevicesInGroup(null, true);
             
             error_log("Searching " . count($devices) . " INPRODUCTION devices with IP pattern: " . $ipPattern . " (regex: " . $regexPattern . ")");
             
@@ -244,7 +266,17 @@ class NetshotAPI {
      */
     public function getDeviceByHostname($hostname, $validateFormat = true) {
         try {
-            // Validate hostname format if required
+            // Check if this is an ABR/DBR/CBR hostname and map to CCAP if found
+            $originalHostname = $hostname;
+            $hostname = $this->mapAbrToCcapHostname($hostname);
+            
+            // If hostname was mapped from ABR to CCAP, skip validation
+            if ($hostname !== $originalHostname) {
+                $validateFormat = false; // Skip validation since we trust the DB mapping
+                error_log("Hostname mapped from ABR/DBR/CBR format: $originalHostname to CCAP: $hostname");
+            }
+            
+            // Validate hostname format if required and not an ABR/DBR/CBR that was mapped
             if ($validateFormat) {
                 // Compliant hostname regex: 2-4 letters, followed by -RC or -LC, followed by 0 and 3 digits, followed by -CCAP and digit 1-6 followed by 0 and another digit
                 $hostnamePattern = '/^[a-zA-Z]{2,4}-(RC|LC)0\d{3}-CCAP[1-6]0[0-9]$/i';
@@ -257,12 +289,8 @@ class NetshotAPI {
             // Convert hostname to uppercase for consistency
             $hostname = strtoupper($hostname);
             
-            $devices = $this->getDevicesInGroup();
-            
-            // Filter devices to only include INPRODUCTION status
-            $devices = array_filter($devices, function($device) {
-                return isset($device['status']) && $device['status'] === 'INPRODUCTION';
-            });
+            // Get only INPRODUCTION devices
+            $devices = $this->getDevicesInGroup(null, true);
             
             error_log("Searching " . count($devices) . " Netshot INPRODUCTION devices for hostname: " . $hostname);
             
@@ -372,18 +400,59 @@ class NetshotAPI {
      * @param string $ipAddress The IP address to search for
      * @return array|null Device details or null if not found
      */
+    /**
+     * Helper method to convert ABR/DBR/CBR hostnames to CCAP hostnames via database lookup
+     * 
+     * @param string $hostname The hostname to check and potentially convert
+     * @return string The original hostname or the mapped CCAP hostname
+     */
+    private function mapAbrToCcapHostname($hostname) {
+        // Check for ABR/DBR/CBR pattern
+        $abrPattern = '/^[a-zA-Z]{2}\d{2}(abr|dbr|cbr)\d{4}$/i';
+        if (!preg_match($abrPattern, $hostname)) {
+            // Not an ABR/DBR/CBR hostname, return as is
+            return $hostname;
+        }
+        
+        error_log("ABR/DBR/CBR format detected: " . $hostname . ". Looking up corresponding CCAP device.");
+        
+        try {
+            // Try to load the Database class
+            if (!class_exists('Database')) {
+                require_once __DIR__ . '/Database.php';
+            }
+            
+            // Create database connection
+            $db = new Database();
+            
+            // Query for the CCAP name
+            $escapedHostname = str_replace("'", "''", strtoupper($hostname)); // Simple SQL escape
+            $sql = "SELECT ccap_name FROM reporting.acc_alias WHERE alias = '$escapedHostname'";
+            error_log("Executing database query: " . $sql);
+            
+            $result = $db->query($sql);
+            if (!empty($result) && isset($result[0]['ccap_name'])) {
+                $ccapHostname = $result[0]['ccap_name'];
+                error_log("Found corresponding CCAP hostname: " . $ccapHostname . " for ABR/DBR/CBR device: " . $hostname);
+                return $ccapHostname;
+            } else {
+                error_log("No CCAP mapping found for ABR/DBR/CBR device: " . $hostname);
+                return $hostname; // Return original if no mapping found
+            }
+        } catch (Exception $dbException) {
+            error_log("Database error looking up ABR/DBR/CBR alias: " . $dbException->getMessage());
+            return $hostname; // Return original on error
+        }
+    }
+    
     public function getDeviceByIP($ipAddress) {
         try {
-            
             error_log("Fetching devices from Netshot for IP lookup: " . $ipAddress);
-            $devices = $this->getDevicesInGroup();
             
-            // Filter devices to only include INPRODUCTION status
-            $devices = array_filter($devices, function($device) {
-                return isset($device['status']) && $device['status'] === 'INPRODUCTION';
-            });
+            // Get only INPRODUCTION devices
+            $devices = $this->getDevicesInGroup(null, true);
             
-            error_log("Filtered to " . count($devices) . " INPRODUCTION devices for IP lookup");
+            error_log("Searching " . count($devices) . " INPRODUCTION devices for IP: " . $ipAddress);
             
             foreach ($devices as $device) {
                 if (isset($device['mgmtIp']) && $device['mgmtIp'] === $ipAddress) {
@@ -421,14 +490,11 @@ class NetshotAPI {
         try {
             
             error_log("Looking up hostnames for IP: " . $ipAddress);
-            $devices = $this->getDevicesInGroup();
             
-            // Filter devices to only include INPRODUCTION status
-            $devices = array_filter($devices, function($device) {
-                return isset($device['status']) && $device['status'] === 'INPRODUCTION';
-            });
+            // Get only INPRODUCTION devices
+            $devices = $this->getDevicesInGroup(null, true);
             
-            error_log("Filtered to " . count($devices) . " INPRODUCTION devices for hostname lookup");
+            error_log("Searching " . count($devices) . " INPRODUCTION devices for hostnames with IP: " . $ipAddress);
             $hostnames = [];
             
             foreach ($devices as $device) {
@@ -457,8 +523,19 @@ class NetshotAPI {
             return $dbDevice;
         }
         
+        // Get the hostname and check if it's an ABR/DBR/CBR pattern first
+        $hostname = $dbDevice['hostname'];
+        $originalHostname = $hostname;
+        
+        // Map ABR/DBR/CBR hostname to CCAP if applicable
+        $hostname = $this->mapAbrToCcapHostname($hostname);
+        if ($hostname !== $originalHostname) {
+            error_log("Enriching device data: Hostname mapped from ABR/DBR/CBR $originalHostname to CCAP $hostname");
+        }
+        
         // Set validateFormat to false to maintain backward compatibility
-        $netshotDevice = $this->getDeviceByHostname($dbDevice['hostname'], false);
+        // This will still only search in INPRODUCTION devices
+        $netshotDevice = $this->getDeviceByHostname($hostname, false);
         
         // Handle both null (not found) and false (invalid format)
         if ($netshotDevice === null || $netshotDevice === false) {
