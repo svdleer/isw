@@ -504,20 +504,49 @@ try {
     // Return successful response
     http_response_code(200);
     
-    // Prepare response data
-    $responseData = [
-        'status' => 200,
-        'search_type' => $searchType,
-        'query' => $query,
-        'count' => count($results),
-        'data' => $results
-    ];
-    
-    if (isset($isJsonRequest) && $isJsonRequest) {
-        // For JSON requests, include original request data in the response
-        $responseData['request'] = [
-            'header' => $data['Header'] ?? null,
-            'body' => $data['Body'] ?? null
+    // Format response data in the requested structure
+    if (!empty($results)) {
+        // Get the first result (if multiple exist)
+        $firstResult = $results[0];
+        $hostname = $firstResult['hostname'] ?? '';
+        $ipAddress = $firstResult['ip_address'] ?? '';
+        
+        // Create response with Header and Body structure as requested
+        $responseData = [
+            'Header' => $isJsonRequest ? 
+                ($data['Header'] ?? []) : 
+                [
+                    'BusinessTransactionID' => '1',
+                    'SentTimestamp' => date('Y-m-d\TH:i:s'),
+                    'SourceContext' => [
+                        'host' => 'ISW-API',
+                        'application' => 'CMDB-API'
+                    ]
+                ],
+            'Body' => [
+                'HostName' => $hostname,
+                'IPAddress' => $ipAddress
+            ]
+        ];
+    } else {
+        // No results found
+        $responseData = [
+            'Header' => $isJsonRequest ? 
+                ($data['Header'] ?? []) : 
+                [
+                    'BusinessTransactionID' => '1',
+                    'SentTimestamp' => date('Y-m-d\TH:i:s'),
+                    'SourceContext' => [
+                        'host' => 'ISW-API',
+                        'application' => 'CMDB-API'
+                    ]
+                ],
+            'Body' => [
+                'HostName' => '',
+                'IPAddress' => '',
+                'status' => 404,
+                'error' => 'No devices found matching the query'
+            ]
         ];
     }
     
