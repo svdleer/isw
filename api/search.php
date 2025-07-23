@@ -522,7 +522,17 @@ try {
     if (!empty($results)) {
         $firstResult = $results[0];
         $hostname = strtolower($firstResult['hostname'] ?? '');
-        $ipAddress = $firstResult['ip_address'] ?? '';
+        
+        // Check if IP address is a complex object and extract just the IP string if needed
+        if (isset($firstResult['ip_address'])) {
+            if (is_array($firstResult['ip_address']) && isset($firstResult['ip_address']['ip'])) {
+                // Extract just the IP string from the complex object
+                $ipAddress = $firstResult['ip_address']['ip'];
+                error_log("Found complex IP object, extracting IP value: " . $ipAddress);
+            } else {
+                $ipAddress = $firstResult['ip_address'];
+            }
+        }
         
         // Log the actual search results
         error_log("Found results: Hostname=" . $hostname . ", IP=" . $ipAddress);
