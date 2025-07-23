@@ -324,7 +324,22 @@ try {
             // Log the number of results found
             error_log("Database query returned " . count($dbResults) . " results for hostname search: " . $searchQuery);
             
-            // For each hostname found, use the loopbackip field or check Netshot
+            // OPTIMIZATION: Get all Netshot devices in a single API call
+            error_log("Getting all devices from Netshot in a single API call");
+            $netshotDevices = $netshot->getDevicesInGroup();
+            error_log("Retrieved " . count($netshotDevices) . " devices from Netshot");
+            
+            // Create a lookup map for faster matching
+            $netshotDeviceMap = [];
+            foreach ($netshotDevices as $netshotDevice) {
+                if (isset($netshotDevice['name']) && !empty($netshotDevice['name'])) {
+                    $deviceName = strtoupper($netshotDevice['name']);
+                    $netshotDeviceMap[$deviceName] = $netshotDevice;
+                }
+            }
+            error_log("Created Netshot device map with " . count($netshotDeviceMap) . " entries");
+            
+            // Process each device from the database
             $results = [];
             foreach ($dbResults as $device) {
                 $hostname = $device['hostname'];
@@ -334,12 +349,11 @@ try {
                     'ip_address' => ''
                 ];
                 
-                // Try to find info in Netshot by hostname to get the IP address
-                error_log("Looking up hostname in Netshot: " . $hostname);
-                $netshotDevice = $netshot->getDeviceByHostname($hostname);
+                // Try to find a direct match in our Netshot device map
+                $netshotDevice = $netshotDeviceMap[strtoupper($hostname)] ?? null;
                 
-                // Log the full Netshot device object for debugging
-                error_log("Netshot response for " . $hostname . ": " . ($netshotDevice ? json_encode($netshotDevice) : 'Not found'));
+                // Log if we found a direct match
+                error_log("Netshot match for " . $hostname . ": " . ($netshotDevice ? "Found" : "Not found"));
                 
                 // Check for IP address in various possible field names
                 $ipAddress = null;
@@ -377,16 +391,16 @@ try {
                         error_log("No IP address found in Netshot device fields for hostname: " . $hostname);
                     }
                 } else {
-                    // Check if an alias might match instead
-                    error_log("Checking for alias matches in Netshot for: " . $hostname);
-                    $devices = $netshot->getDevicesInGroup();
-                    foreach ($devices as $potentialMatch) {
+                    // Check for partial/alias matches if no exact match found
+                    error_log("Checking for alias/partial matches in Netshot for: " . $hostname);
+                    
+                    // Look for potential alias matches in our map (without making another API call)
+                    $foundMatch = false;
+                    foreach ($netshotDeviceMap as $deviceName => $potentialMatch) {
                         // Simple check: does the hostname contain our search term or vice versa
-                        $deviceName = strtoupper($potentialMatch['name'] ?? '');
-                        if (!empty($deviceName) && 
-                            (strpos($deviceName, strtoupper($hostname)) !== false || 
-                             strpos(strtoupper($hostname), $deviceName) !== false)) {
-                            error_log("Found potential alias match in Netshot: " . $potentialMatch['name']);
+                        if (strpos($deviceName, strtoupper($hostname)) !== false || 
+                            strpos(strtoupper($hostname), $deviceName) !== false) {
+                            error_log("Found potential alias match in Netshot map: " . $potentialMatch['name']);
                             
                             // Check for IP address in various possible field names
                             $ipAddress = null;
@@ -418,9 +432,14 @@ try {
                                     'vendor' => $potentialMatch['domain'] ?? null,
                                     'status' => $potentialMatch['status'] ?? null
                                 ];
+                                $foundMatch = true;
                                 break;
                             }
                         }
+                    }
+                    
+                    if (!$foundMatch) {
+                        error_log("No matching device found in Netshot for: " . $hostname);
                     }
                 }
                 
@@ -482,7 +501,29 @@ try {
                         
                         // We'll rely completely on Netshot or fallback algorithm for IP address information
                         error_log("Attempting to find device by hostname lookup");
-                        $hostnameResults = $netshot->getDeviceNamesByIP($searchQuery);
+                        // OPTIMIZATION: Use the devices we already retrieved rather than making another API call
+                        $hostnameResults = [];
+                        
+                        // Search through our Netshot devices for any that have this IP
+                        foreach ($netshotDevices as $device) {
+                            $deviceIp = null;
+                            // Check all possible field names for IP address
+                            $possibleIpFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
+                            foreach ($possibleIpFields as $field) {
+                                if (isset($device[$field])) {
+                                    $ipValue = $device[$field];
+                                    // Handle case where IP is an object with 'ip' field
+                                    if (is_array($ipValue) && isset($ipValue['ip'])) {
+                                        $ipValue = $ipValue['ip'];
+                                    }
+                                    
+                                    if ($ipValue === $searchQuery) {
+                                        $hostnameResults[] = $device['name'];
+                                        break;
+                                    }
+                                }
+                            }
+                        }
                         
                         if (!empty($hostnameResults)) {
                             foreach ($hostnameResults as $hostname) {
@@ -510,7 +551,7 @@ try {
                     error_log("Error querying Netshot API: " . $e->getMessage());
                 }
             } else {
-                // For wildcard searches, only use Netshot
+                // For wildcard searches, use our already retrieved Netshot devices
                 error_log("Performing wildcard IP lookup for: " . $searchQuery);
                 
                 // Not using database loopbackip field as it's not useful
@@ -543,29 +584,54 @@ try {
                     error_log("Error looking up hostnames for IP pattern: " . $e->getMessage());
                 }
                 
-                // Then, also check Netshot for additional results
-                error_log("Also checking Netshot for wildcard IP: " . $searchQuery);
+                // OPTIMIZATION: Use the devices we already retrieved rather than making another API call
+                error_log("Using already retrieved Netshot devices for wildcard IP pattern matching: " . $searchQuery);
                 try {
-                    $netshotDevices = $netshot->searchDevicesByIp($searchQuery);
-                    if (!empty($netshotDevices)) {
-                        foreach ($netshotDevices as $device) {
-                            $results[] = [
-                                'hostname' => $device['name'] ?? 'Unknown',
-                                'ip_address' => $device['ip'] ?? $searchQuery,
-                                'netshot' => [
-                                    'id' => $device['id'] ?? null,
-                                    'name' => $device['name'] ?? null,
-                                    'ip' => $device['ip'] ?? null,
-                                    'model' => $device['model'] ?? null,
-                                    'vendor' => $device['vendor'] ?? null,
-                                    'status' => $device['status'] ?? null
-                                ]
-                            ];
+                    // Prepare wildcard pattern for regex
+                    $pattern = str_replace(['%', '*', '.'], ['.*', '.*', '\\.'], $searchQuery);
+                    $pattern = '/^' . $pattern . '$/i';
+                    error_log("IP regex pattern: " . $pattern);
+                    
+                    // Search through our Netshot devices for any that have an IP matching our pattern
+                    $matchCount = 0;
+                    foreach ($netshotDevices as $device) {
+                        $deviceIp = null;
+                        // Check all possible field names for IP address
+                        $possibleIpFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
+                        foreach ($possibleIpFields as $field) {
+                            if (isset($device[$field])) {
+                                $ipValue = $device[$field];
+                                // Handle case where IP is an object with 'ip' field
+                                if (is_array($ipValue) && isset($ipValue['ip'])) {
+                                    $ipValue = $ipValue['ip'];
+                                }
+                                
+                                // Check if this IP matches our pattern
+                                if (preg_match($pattern, $ipValue) || 
+                                    // Also check for partial string matches for % and * wildcards
+                                    strpos($searchQuery, '%') !== false && fnmatch(str_replace('%', '*', $searchQuery), $ipValue)) {
+                                    $results[] = [
+                                        'hostname' => $device['name'] ?? 'Unknown',
+                                        'ip_address' => $ipValue,
+                                        'netshot' => [
+                                            'id' => $device['id'] ?? null,
+                                            'name' => $device['name'] ?? null,
+                                            'ip' => $ipValue,
+                                            'model' => $device['family'] ?? null,
+                                            'vendor' => $device['domain'] ?? null,
+                                            'status' => $device['status'] ?? null
+                                        ]
+                                    ];
+                                    $matchCount++;
+                                    break;
+                                }
+                            }
                         }
                     }
+                    error_log("Found $matchCount devices matching wildcard IP pattern: " . $searchQuery);
                 } catch (Exception $e) {
                     // Log the error but don't interrupt the response
-                    error_log("Error querying Netshot API for wildcard search: " . $e->getMessage());
+                    error_log("Error processing wildcard IP search: " . $e->getMessage());
                 }
             }
             break;

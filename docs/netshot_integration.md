@@ -91,9 +91,13 @@ The API looks for IP addresses in Netshot devices using the following field name
 
 If none of these fields contain a valid IP address, the system will fall back to generating an IP address algorithmically based on the hostname pattern. Note that the database loopbackip field is not used as it typically contains outdated or unreliable information.
 
+## Performance Optimization
+
+To improve performance, the API retrieves all Netshot devices in a single API call instead of making individual requests for each device. This significantly reduces network overhead and improves response times.
+
 ## Caching
 
-To improve performance, Netshot API responses are cached for one hour. This helps reduce load on the Netshot system and provides faster responses for repeated queries.
+For further performance improvement, Netshot API responses are cached for one hour. This helps reduce load on the Netshot system and provides faster responses for repeated queries.
 
 ## Example Usage
 
