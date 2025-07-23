@@ -105,15 +105,23 @@ class ApiAuth {
     }
 
     public function validateHostname($hostname) {
-        // Single wildcard case - allowed but will be transformed to CCAP search later
+        // Single wildcard case - allowed and will return all CCAP devices
         if ($hostname === '*' || $hostname === '%') {
             return true;
         }
         
-        // For wildcards, we need to ensure CCAP is included in the search
+        // For wildcards, ensure proper handling for both * and %
         if (strpos($hostname, '*') !== false || strpos($hostname, '%') !== false) {
-            // Only allow wildcard searches that explicitly include CCAP
-            return stripos($hostname, 'CCAP') !== false;
+            // Convert * to % for consistency in validation
+            $normalizedHostname = str_replace('*', '%', $hostname);
+            
+            // Allow wildcards with CCAP
+            if (stripos($normalizedHostname, 'CCAP') !== false) {
+                return true;
+            }
+            
+            // Allow wildcards that will have CCAP added later
+            return true;
         }
         
         // Traditional pattern check for exact matches
@@ -156,14 +164,13 @@ class ApiAuth {
     }
 
     public function prepareHostnameQuery($hostname) {
+        // Handle pure wildcard searches - will be converted to CCAP search in main code
+        if ($hostname === '*' || $hostname === '%') {
+            return '%';
+        }
+        
         // Convert search patterns to SQL LIKE patterns
         $hostname = str_replace('*', '%', $hostname);
-        
-        // If it's just a wildcard, it will be handled separately
-        // and will search for CCAP in the calling code
-        if ($hostname === '%') {
-            return $hostname;
-        }
         
         // Ensure CCAP is part of the query if not already present
         if (stripos($hostname, 'CCAP') === false) {

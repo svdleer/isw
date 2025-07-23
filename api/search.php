@@ -272,10 +272,10 @@ try {
             $searchQuery = $auth->prepareHostnameQuery($query);
             error_log("After prepareHostnameQuery: " . $searchQuery);
             
-            // Special case: if only wildcard is submitted, search for hostnames containing CCAP
-            if ($searchQuery === '%' || $searchQuery === '*') {
+            // Special case: if only wildcard is submitted or query is just '*' or '%', search for all CCAP devices
+            if ($searchQuery === '%' || $searchQuery === '*' || $query === '*' || $query === '%') {
                 $searchQuery = '%CCAP%';
-                error_log("Single wildcard converted to: " . $searchQuery);
+                error_log("Wildcard search converted to return all CCAP devices: " . $searchQuery);
             } 
             
             // Always make sure CCAP is part of the search criteria
@@ -291,8 +291,7 @@ try {
             // Log the final search query for debugging
             error_log("Final hostname search query: " . $searchQuery);
             
-            // Query that gets only active devices - using only hostname/alias fields
-            // Only selecting hostname
+            // Construct the SQL query to return all matching CCAP devices
             $sql = "SELECT 
                    a.hostname
                    FROM access.devicesnew a 
