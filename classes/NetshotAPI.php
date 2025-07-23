@@ -211,10 +211,36 @@ class NetshotAPI {
             }
             
             $devices = $this->getDevicesInGroup();
+            error_log("Searching " . count($devices) . " Netshot devices for hostname: " . $hostname);
+            
+            // Log a sample device to see the structure
+            if (!empty($devices)) {
+                $sampleDevice = $devices[0];
+                error_log("Sample Netshot device structure: " . json_encode(array_keys($sampleDevice)));
+                
+                // Check for IP address fields in the sample device
+                $ipFields = ['mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
+                foreach ($ipFields as $field) {
+                    if (isset($sampleDevice[$field])) {
+                        error_log("Found IP field in Netshot data: '$field' with value: " . $sampleDevice[$field]);
+                    }
+                }
+            }
             
             // First try exact match
             foreach ($devices as $device) {
                 if (isset($device['name']) && strtoupper($device['name']) === strtoupper($hostname)) {
+                    error_log("Found exact hostname match in Netshot: " . $device['name']);
+                    
+                    // Log all fields in the device
+                    foreach ($device as $key => $value) {
+                        if (!is_array($value)) {
+                            error_log("Device field '$key': " . $value);
+                        } else {
+                            error_log("Device field '$key': [array]");
+                        }
+                    }
+                    
                     // Save to cache
                     $this->saveToCache($cacheKey, $device);
                     return $device;
@@ -236,6 +262,15 @@ class NetshotAPI {
                     // Check for CCAP in both names as extra verification
                     if (strpos($deviceName, 'CCAP') !== false && strpos($searchName, 'CCAP') !== false) {
                         error_log("Found fuzzy hostname match: " . $device['name'] . " for query: " . $hostname);
+                        
+                        // Check IP field
+                        $ipFields = ['mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
+                        foreach ($ipFields as $field) {
+                            if (isset($device[$field]) && !empty($device[$field])) {
+                                error_log("IP field '$field' contains: " . $device[$field]);
+                            }
+                        }
+                        
                         // Save to cache
                         $this->saveToCache($cacheKey, $device);
                         return $device;
@@ -244,6 +279,7 @@ class NetshotAPI {
             }
             
             // No match found - cache null result to prevent repeated lookups
+            error_log("No hostname match found in Netshot for: " . $hostname);
             $this->saveToCache($cacheKey, null);
             return null;
         } catch (Exception $e) {

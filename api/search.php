@@ -258,17 +258,36 @@ try {
                 error_log("Looking up IP for hostname in Netshot: " . $hostname);
                 $netshotDevice = $netshot->getDeviceByHostname($hostname);
                 
-                if ($netshotDevice && isset($netshotDevice['mgmtIp'])) {
-                    error_log("Found IP in Netshot for hostname " . $hostname . ": " . $netshotDevice['mgmtIp']);
-                    $deviceWithIp['ip_address'] = $netshotDevice['mgmtIp'];
-                    $deviceWithIp['netshot'] = [
-                        'id' => $netshotDevice['id'] ?? null,
-                        'name' => $netshotDevice['name'] ?? null,
-                        'ip' => $netshotDevice['mgmtIp'] ?? null,
-                        'model' => $netshotDevice['family'] ?? null,
-                        'vendor' => $netshotDevice['domain'] ?? null,
-                        'status' => $netshotDevice['status'] ?? null
-                    ];
+                // Log the full Netshot device object for debugging
+                error_log("Netshot response for " . $hostname . ": " . ($netshotDevice ? json_encode($netshotDevice) : 'Not found'));
+                
+                // Check for IP address in various possible field names
+                $ipAddress = null;
+                if ($netshotDevice) {
+                    // Check all possible field names for IP address
+                    $possibleIpFields = ['mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
+                    foreach ($possibleIpFields as $field) {
+                        if (isset($netshotDevice[$field]) && !empty($netshotDevice[$field])) {
+                            $ipAddress = $netshotDevice[$field];
+                            error_log("Found IP in field '$field': " . $ipAddress);
+                            break;
+                        }
+                    }
+                    
+                    if ($ipAddress) {
+                        error_log("Found IP in Netshot for hostname " . $hostname . ": " . $ipAddress);
+                        $deviceWithIp['ip_address'] = $ipAddress;
+                        $deviceWithIp['netshot'] = [
+                            'id' => $netshotDevice['id'] ?? null,
+                            'name' => $netshotDevice['name'] ?? null,
+                            'ip' => $ipAddress,
+                            'model' => $netshotDevice['family'] ?? null,
+                            'vendor' => $netshotDevice['domain'] ?? null,
+                            'status' => $netshotDevice['status'] ?? null
+                        ];
+                    } else {
+                        error_log("No IP address found in Netshot device fields for hostname: " . $hostname);
+                    }
                 } else {
                     // Check if an alias might match instead
                     error_log("Checking for alias matches in Netshot for: " . $hostname);
@@ -280,12 +299,25 @@ try {
                             (strpos($deviceName, strtoupper($hostname)) !== false || 
                              strpos(strtoupper($hostname), $deviceName) !== false)) {
                             error_log("Found potential alias match in Netshot: " . $potentialMatch['name']);
-                            if (isset($potentialMatch['mgmtIp'])) {
-                                $deviceWithIp['ip_address'] = $potentialMatch['mgmtIp'];
+                            
+                            // Check for IP address in various possible field names
+                            $ipAddress = null;
+                            $possibleIpFields = ['mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
+                            foreach ($possibleIpFields as $field) {
+                                if (isset($potentialMatch[$field]) && !empty($potentialMatch[$field])) {
+                                    $ipAddress = $potentialMatch[$field];
+                                    error_log("Found IP in field '$field' for alias match: " . $ipAddress);
+                                    break;
+                                }
+                            }
+                            
+                            if ($ipAddress) {
+                                error_log("Using IP from alias match for " . $hostname . ": " . $ipAddress);
+                                $deviceWithIp['ip_address'] = $ipAddress;
                                 $deviceWithIp['netshot'] = [
                                     'id' => $potentialMatch['id'] ?? null,
                                     'name' => $potentialMatch['name'] ?? null,
-                                    'ip' => $potentialMatch['mgmtIp'] ?? null,
+                                    'ip' => $ipAddress,
                                     'model' => $potentialMatch['family'] ?? null,
                                     'vendor' => $potentialMatch['domain'] ?? null,
                                     'status' => $potentialMatch['status'] ?? null
