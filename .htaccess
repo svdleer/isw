@@ -25,6 +25,20 @@ RewriteRule ^(.*)$ - [L]
 RewriteCond %{REQUEST_URI} ^/isw/admin/
 RewriteRule ^(.*)$ - [L]
 
+# Handle API endpoints without .php extension
+# Special rule for /api/search endpoint
+RewriteRule ^api/search$ api/search.php [L]
+# General rule for other API endpoints
+RewriteRule ^api/([^/]+)$ api/$1.php [L]
+
+# We're using PHP-based authentication, not Apache's auth_basic
+# So remove any Auth directives that might cause conflicts
+<Files "api/search.php">
+    # Clear any auth requirements that might interfere with our PHP auth
+    Allow from all
+    Satisfy any
+</Files>
+
 # Redirect all other requests to index.php unless the file exists
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d

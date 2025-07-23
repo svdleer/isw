@@ -119,6 +119,8 @@ curl -X POST http://localhost/isw/api/search \
   }'
 ```
 
+> Note: The API now supports clean URLs without the `.php` extension. You can use both `/api/search.php` and `/api/search` in your requests.
+
 ### IP Address Search with Wildcard
 ```bash
 curl -X POST http://localhost/isw/api/search \

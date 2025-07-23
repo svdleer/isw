@@ -54,8 +54,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // Include required classes
-require_once __DIR__ . '/classes/Database.php';
-require_once __DIR__ . '/classes/ApiAuth.php';
+require_once __DIR__ . '/../classes/Database.php';
+require_once __DIR__ . '/../classes/ApiAuth.php';
 
 try {
     // Initialize classes

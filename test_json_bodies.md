@@ -10,6 +10,57 @@ Authorization: Basic YWRtaW46cGFzc3dvcmQ=
 
 This header represents the Base64 encoding of `admin:password`. Replace with your own credentials if needed.
 
+## curl Examples
+
+### Example 1: Using inline JSON
+```bash
+curl -X POST http://localhost/isw/api/search \
+  -u admin:password \
+  -H "Content-Type: application/json" \
+  -d '{
+    "Header": {
+      "BusinessTransactionID": "1",
+      "SentTimestamp": "2023-11-10T09:20:00",
+      "SourceContext": {
+        "host": "TestServer",
+        "application": "ApiTester"
+      }
+    },
+    "Body": {
+      "HostName": "GV-RC0011-CCAP003"
+    }
+  }'
+```
+
+### Example 2: Using a JSON file
+```bash
+# Create a JSON file with your request body
+echo '{
+  "Header": {
+    "BusinessTransactionID": "7",
+    "SentTimestamp": "2023-11-10T10:20:00",
+    "SourceContext": {
+      "host": "TestServer",
+      "application": "ApiTester"
+    }
+  },
+  "Body": {
+    "IPAddress": "172.16.55.*"
+  }
+}' > request.json
+
+# Send the request using the file
+curl -X POST http://localhost/isw/api/search \
+  -u admin:password \
+  -H "Content-Type: application/json" \
+  -d @request.json
+```
+
+### Example 3: Windows CMD-friendly version
+```cmd
+curl -X POST http://localhost/isw/api/search -u admin:password -H "Content-Type: application/json" -d "{\"Header\":{\"BusinessTransactionID\":\"1\",\"SentTimestamp\":\"2023-11-10T09:20:00\",\"SourceContext\":{\"host\":\"TestServer\",\"application\":\"ApiTester\"}},\"Body\":{\"HostName\":\"*\"}}"
+```
+
 ## Hostname Search Test Bodies
 
 ### 1. Exact hostname search
