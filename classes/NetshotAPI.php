@@ -1,0 +1,256 @@
+<?php
+/**
+ * Netshot API Integration Class
+ * 
+ * This class handles communication with the Netshot API to enhance
+ * device searches with additional information.
+ */
+class NetshotAPI {
+    private $apiUrl;
+    private $apiKey;
+    private $cacheTime = 3600; // Cache results for 1 hour by default
+    private $cacheDir;
+    
+    /**
+     * Constructor
+     * 
+     * @param string $apiUrl The base URL for Netshot API
+     * @param string $apiKey The API key for authentication
+     */
+    public function __construct($apiUrl = null, $apiKey = null) {
+        // Load environment variables
+        require_once __DIR__ . '/EnvLoader.php';
+        EnvLoader::load();
+        
+        // Use provided values or fall back to environment variables
+        $this->apiUrl = $apiUrl ?: $_ENV['NETSHOT_API_URL'] ?? 'https://netshot.oss.local/api';
+        $this->apiKey = $apiKey ?: $_ENV['NETSHOT_API_KEY'] ?? 'UqRf6NkgvKru3rxRRrRKck1VoANQJvP2';
+        
+        // Set up cache directory
+        $this->cacheDir = __DIR__ . '/../cache/netshot';
+        if (!file_exists($this->cacheDir)) {
+            mkdir($this->cacheDir, 0755, true);
+        }
+    }
+
+    /**
+     * Get devices from a specific group
+     * 
+     * @param int $groupId The ID of the group to fetch devices from
+     * @return array Devices in the specified group
+     */
+    public function getDevicesInGroup($groupId = 207) {
+        // Check cache first
+        $cacheKey = "devices_group_{$groupId}";
+        $cachedResult = $this->getFromCache($cacheKey);
+        if ($cachedResult !== false) {
+            return $cachedResult;
+        }
+        
+        $url = "{$this->apiUrl}/devices?group={$groupId}";
+        
+        try {
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'X-Netshot-API-Key: ' . $this->apiKey,
+                'Accept: application/json'
+            ]);
+            // Skip SSL verification in development (remove this in production)
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            
+            if ($httpCode !== 200) {
+                error_log("Netshot API error: HTTP {$httpCode} - " . curl_error($ch));
+                return [];
+            }
+            
+            curl_close($ch);
+            
+            $result = json_decode($response, true) ?: [];
+            
+            // Save to cache
+            $this->saveToCache($cacheKey, $result);
+            
+            return $result;
+        } catch (Exception $e) {
+            error_log("Netshot API exception: " . $e->getMessage());
+            return [];
+        }
+    }
+    
+    /**
+     * Get data from cache
+     * 
+     * @param string $key The cache key
+     * @return mixed The cached data or false if not found/expired
+     */
+    private function getFromCache($key) {
+        $cacheFile = $this->cacheDir . '/' . md5($key) . '.cache';
+        
+        if (file_exists($cacheFile)) {
+            $data = file_get_contents($cacheFile);
+            $cache = json_decode($data, true);
+            
+            // Check if cache is still valid
+            if ($cache['expires'] > time()) {
+                return $cache['data'];
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Save data to cache
+     * 
+     * @param string $key The cache key
+     * @param mixed $data The data to cache
+     * @return bool Success or failure
+     */
+    private function saveToCache($key, $data) {
+        $cacheFile = $this->cacheDir . '/' . md5($key) . '.cache';
+        
+        $cache = [
+            'expires' => time() + $this->cacheTime,
+            'data' => $data
+        ];
+        
+        return file_put_contents($cacheFile, json_encode($cache)) !== false;
+    }
+    
+    /**
+     * Clear the cache for a specific key or all cache
+     * 
+     * @param string|null $key The cache key (or null to clear all)
+     * @return void
+     */
+    public function clearCache($key = null) {
+        if ($key) {
+            $cacheFile = $this->cacheDir . '/' . md5($key) . '.cache';
+            if (file_exists($cacheFile)) {
+                unlink($cacheFile);
+            }
+        } else {
+            $files = glob($this->cacheDir . '/*.cache');
+            foreach ($files as $file) {
+                unlink($file);
+            }
+        }
+    }
+    
+    /**
+     * Search for a device by IP address
+     * 
+     * @param string $ipPattern IP address pattern (can include wildcards as * or %)
+     * @return array Matching devices
+     */
+    public function searchDevicesByIp($ipPattern) {
+        // Convert SQL LIKE pattern to regex
+        $regexPattern = $this->patternToRegex($ipPattern);
+        $devices = $this->getDevicesInGroup();
+        
+        // Filter devices by IP
+        return array_filter($devices, function($device) use ($regexPattern) {
+            if (!isset($device['mgmtIp'])) {
+                return false;
+            }
+            
+            return preg_match($regexPattern, $device['mgmtIp']);
+        });
+    }
+    
+    /**
+     * Get device details by hostname
+     * 
+     * @param string $hostname The hostname to search for
+     * @return array|null Device details or null if not found
+     */
+    public function getDeviceByHostname($hostname) {
+        $devices = $this->getDevicesInGroup();
+        
+        foreach ($devices as $device) {
+            if (isset($device['name']) && strtoupper($device['name']) === strtoupper($hostname)) {
+                return $device;
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Convert SQL LIKE pattern (with % or * wildcards) to a regex pattern
+     * 
+     * @param string $pattern SQL LIKE pattern
+     * @return string Regex pattern
+     */
+    private function patternToRegex($pattern) {
+        // Replace SQL LIKE wildcards with regex equivalents
+        $pattern = str_replace(['%', '*'], ['.+', '.+'], $pattern);
+        
+        // Escape regex special characters except the ones we just added
+        $pattern = preg_quote($pattern, '/');
+        
+        // Replace back our wildcards
+        $pattern = str_replace(['\\.+'], ['.+'], $pattern);
+        
+        return '/^' . $pattern . '$/i';
+    }
+    
+    /**
+     * Get device details by IP address (exact match)
+     * 
+     * @param string $ipAddress The IP address to search for
+     * @return array|null Device details or null if not found
+     */
+    public function getDeviceByIP($ipAddress) {
+        $devices = $this->getDevicesInGroup();
+        
+        foreach ($devices as $device) {
+            if (isset($device['mgmtIp']) && $device['mgmtIp'] === $ipAddress) {
+                // Format the response consistently
+                return [
+                    'id' => $device['id'] ?? null,
+                    'name' => $device['name'] ?? null,
+                    'ip' => $device['mgmtIp'] ?? $ipAddress,
+                    'model' => $device['family'] ?? null,
+                    'vendor' => $device['domain'] ?? null,
+                    'status' => $device['status'] ?? null,
+                    'software_version' => $device['softwareVersion'] ?? null,
+                    'last_check' => $device['lastCheck'] ?? null
+                ];
+            }
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Enrich device data from database with Netshot data
+     * 
+     * @param array $dbDevice Device data from database
+     * @return array Enriched device data
+     */
+    public function enrichDeviceData($dbDevice) {
+        if (!isset($dbDevice['hostname'])) {
+            return $dbDevice;
+        }
+        
+        $netshotDevice = $this->getDeviceByHostname($dbDevice['hostname']);
+        
+        if (!$netshotDevice) {
+            return $dbDevice;
+        }
+        
+        // Add Netshot data to device record
+        $dbDevice['netshot_id'] = $netshotDevice['id'] ?? null;
+        $dbDevice['netshot_status'] = $netshotDevice['status'] ?? null;
+        $dbDevice['netshot_family'] = $netshotDevice['family'] ?? null;
+        $dbDevice['netshot_software_version'] = $netshotDevice['softwareVersion'] ?? null;
+        
+        return $dbDevice;
+    }
+}

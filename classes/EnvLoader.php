@@ -37,8 +37,8 @@ class EnvLoader {
                 
                 // Remove quotes if present
                 if (strlen($value) > 1 && 
-                    (($value[0] === '"' && $value[-1] === '"') || 
-                     ($value[0] === "'" && $value[-1] === "'"))) {
+                    (($value[0] === '"' && $value[strlen($value)-1] === '"') || 
+                     ($value[0] === "'" && $value[strlen($value)-1] === "'"))) {
                     $value = substr($value, 1, -1);
                 }
                 

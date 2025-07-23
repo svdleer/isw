@@ -1,19 +1,21 @@
 # ISW CMDB PHP REST API
 
-A PHP REST API for querying a MySQL CMDB database with support for hostname and IP address searches using API key authentication.
+A PHP REST API for querying a MySQL CMDB database with support for hostname and IP address searches using HTTP Basic Authentication.
 
 ## Features
 
-- **API Key Authentication**: Secure access with API key validation
-- **Admin Dashboard**: Web-based admin tool for managing API keys
-- **Database-stored API Keys**: API keys are stored and managed in MySQL
+- **HTTP Basic Authentication**: Secure access with username/password authentication
+- **Admin Dashboard**: Web-based admin tool for managing API access
 - **Interactive API Documentation**: Swagger/OpenAPI documentation with live testing
 - **Hostname Search**: Search for devices using hostname patterns (4char-2char4num-CCAPxxx format)
 - **IP Address Search**: Search for devices using IP addresses
 - **Wildcard Support**: Both hostname and IP searches support wildcards (* or %)
+- **JSON Body Searches**: Support for JSON-formatted search requests
 - **JSON Responses**: All responses are in JSON format
 - **Error Handling**: Comprehensive error handling with appropriate HTTP status codes
-- **Usage Tracking**: Track API key usage and statistics
+- **Netshot API Integration**: Enhanced device information from Netshot API
+- **Response Caching**: Cached Netshot API responses for improved performance
+- **Clean URL Support**: API accessible without .php extensions via .htaccess
 
 ## API Endpoints
 
@@ -67,18 +69,107 @@ Supports standard IPv4 addresses with optional wildcards.
 
 ## Usage Examples
 
+### GET Requests
+
 ```bash
-# Exact hostname search
-curl "http://localhost/isw/api/search?type=hostname&q=GV-RC0011-CCAP003&api_key=your-api-key-here"
+# Exact hostname search with HTTP Basic Auth
+curl -u "isw:Spyem_OtGheb4" "http://localhost/isw/api/search?type=hostname&q=GV-RC0011-CCAP003"
 
 # Wildcard hostname search
-curl "http://localhost/isw/api/search?type=hostname&q=CCAP*&api_key=your-api-key-here"
+curl -u "isw:Spyem_OtGheb4" "http://localhost/isw/api/search?type=hostname&q=CCAP*"
 
 # Exact IP search
-curl "http://localhost/isw/api/search?type=ip&q=192.168.1.100&api_key=your-api-key-here"
+curl -u "isw:Spyem_OtGheb4" "http://localhost/isw/api/search?type=ip&q=192.168.1.100"
 
 # Wildcard IP search
-curl "http://localhost/isw/api/search?type=ip&q=192.168.1.*&api_key=your-api-key-here"
+curl -u "isw:Spyem_OtGheb4" "http://localhost/isw/api/search?type=ip&q=192.168.1.*"
+```
+
+### POST Requests with JSON Body
+
+```bash
+# Hostname search with JSON body
+curl -X POST -u "isw:Spyem_OtGheb4" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "Header": {
+      "BusinessTransactionID": "1",
+      "SentTimestamp": "2023-11-10T09:20:00",
+      "SourceContext": {
+        "host": "ExampleSystem",
+        "application": "ServicePortal"
+      }
+    },
+    "Body": {
+      "HostName": "GV-RC0052-CCAP002"
+    }
+  }' \
+  "http://localhost/isw/api/search"
+
+# IP search with JSON body
+curl -X POST -u "isw:Spyem_OtGheb4" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "Header": {
+      "BusinessTransactionID": "1",
+      "SentTimestamp": "2023-11-10T09:20:00",
+      "SourceContext": {
+        "host": "ExampleSystem",
+        "application": "ServicePortal"
+      }
+    },
+    "Body": {
+      "IPAddress": "172.16.55.26"
+    }
+  }' \
+  "http://localhost/isw/api/search"
+```
+
+### Clean URL Examples (without .php extension)
+
+```bash
+# Using clean URLs without .php extension
+curl -u "isw:Spyem_OtGheb4" "http://localhost/isw/api/search?type=hostname&q=CCAP*"
+```
+
+## Netshot API Integration
+
+The API now integrates with Netshot to provide additional device information when performing IP searches:
+
+1. **Enhanced Device Information**: Additional fields like model, vendor, software version
+2. **Caching**: Netshot API responses are cached to improve performance
+3. **Fallback Support**: If a device isn't in the local database but exists in Netshot, it will still be returned
+4. **Seamless Integration**: No changes to API request format required
+
+**Example Response with Netshot Data:**
+
+```json
+{
+  "status": 200,
+  "search_type": "ip",
+  "query": "10.0.0.1",
+  "count": 1,
+  "data": [
+    {
+      "hostname": "GV-RC0011-CCAP003",
+      "ip_address": "10.0.0.1",
+      "description": "Core router",
+      "created_at": "2023-01-01 12:00:00",
+      "updated_at": "2023-06-15 09:30:00",
+      "location": "Datacenter 1",
+      "netshot": {
+        "id": 1234,
+        "name": "GV-RC0011-CCAP003",
+        "ip": "10.0.0.1",
+        "model": "ASR-9000",
+        "vendor": "Cisco",
+        "status": "up",
+        "software_version": "IOS-XR 7.3.2",
+        "last_check": "2023-11-10T14:25:30"
+      }
+    }
+  ]
+}
 ```
 
 ## Installation
@@ -92,7 +183,7 @@ curl "http://localhost/isw/api/search?type=ip&q=192.168.1.*&api_key=your-api-key
 2. **Environment Configuration**
    ```bash
    cp .env.example .env
-   # Edit .env with your database credentials
+   # Edit .env with your database credentials and Netshot API information
    ```
 
 3. **Web Server Configuration**

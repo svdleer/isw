@@ -38,6 +38,9 @@
  *         "IPAddress": "172.16.55.26"
  *     }
  * }
+ * 
+ * With Netshot integration, additional device information will be included 
+ * when searching by IP address if the device is found in Netshot.
  */
 
 // Set headers for API response
@@ -56,11 +59,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 // Include required classes
 require_once __DIR__ . '/../classes/Database.php';
 require_once __DIR__ . '/../classes/ApiAuth.php';
+require_once __DIR__ . '/../classes/NetshotAPI.php';
 
 try {
     // Initialize classes
     $db = new Database();
     $auth = new ApiAuth($db); // Pass database connection for API key validation
+    $netshot = new NetshotAPI(); // Initialize Netshot API client
     
     // Handle different request methods
     $requestMethod = $_SERVER['REQUEST_METHOD'];
@@ -104,6 +109,14 @@ try {
                         'status' => 400
                     ]);
                     exit();
+                }
+                
+                // Special case for JSON body IP searches - add request to track it in logs
+                error_log("JSON body IP search for: " . $query);
+                
+                // For exact IP searches in JSON body, check Netshot API first for better data
+                if (strpos($query, '*') === false && strpos($query, '%') === false) {
+                    error_log("Checking Netshot API for IP: " . $query);
                 }
             } else {
                 http_response_code(400);
@@ -272,6 +285,26 @@ try {
                        AND a.active = 1
                        ORDER BY a.ip_address";
                 $results = $db->query($sql, [$searchQuery]);
+                
+                // Check Netshot API for additional device information
+                $netshotDevice = $netshot->getDeviceByIP($searchQuery);
+                if ($netshotDevice) {
+                    // If we have results from our database, enhance them with Netshot data
+                    if (!empty($results)) {
+                        foreach ($results as &$device) {
+                            $device['netshot'] = $netshotDevice;
+                        }
+                    } 
+                    // If no results from our database, but device found in Netshot
+                    else {
+                        $results[] = [
+                            'hostname' => $netshotDevice['name'] ?? 'Unknown',
+                            'ip_address' => $searchQuery,
+                            'description' => 'Device found in Netshot',
+                            'netshot' => $netshotDevice
+                        ];
+                    }
+                }
             }
             break;
             
