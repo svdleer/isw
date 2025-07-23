@@ -151,8 +151,28 @@ if (!empty($devices)) {
     echo "Sample devices: \n";
     $sampleCount = min(3, count($devices));
     for ($i = 0; $i < $sampleCount; $i++) {
-        echo "  - " . ($devices[$i]['name'] ?? 'Unnamed') . 
-             " (IP: " . ($devices[$i]['mgmtIp'] ?? $devices[$i]['ip'] ?? 'Unknown') . ")\n";
+        $device = $devices[$i];
+        $ipFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
+        $foundIp = 'Unknown';
+        foreach ($ipFields as $field) {
+            if (isset($device[$field]) && !empty($device[$field])) {
+                $foundIp = $device[$field] . " (from field: {$field})";
+                break;
+            }
+        }
+        echo "  - " . ($device['name'] ?? 'Unnamed') . " (IP: {$foundIp})\n";
+    }
+    
+    // Show all fields in the first device to help troubleshoot
+    if (!empty($devices[0])) {
+        echo "\nAll fields in first device:\n";
+        foreach ($devices[0] as $key => $value) {
+            if (!is_array($value)) {
+                echo "  {$key}: {$value}\n";
+            } else {
+                echo "  {$key}: [array]\n";
+            }
+        }
     }
 }
 

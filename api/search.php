@@ -319,7 +319,7 @@ try {
                 $ipAddress = null;
                 if ($netshotDevice) {
                     // Check all possible field names for IP address
-                    $possibleIpFields = ['mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
+                    $possibleIpFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
                     foreach ($possibleIpFields as $field) {
                         if (isset($netshotDevice[$field]) && !empty($netshotDevice[$field])) {
                             $ipAddress = $netshotDevice[$field];
@@ -356,7 +356,7 @@ try {
                             
                             // Check for IP address in various possible field names
                             $ipAddress = null;
-                            $possibleIpFields = ['mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
+                            $possibleIpFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
                             foreach ($possibleIpFields as $field) {
                                 if (isset($potentialMatch[$field]) && !empty($potentialMatch[$field])) {
                                     $ipAddress = $potentialMatch[$field];

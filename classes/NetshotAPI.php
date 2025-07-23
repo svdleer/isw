@@ -312,7 +312,7 @@ class NetshotAPI {
                 error_log("Sample Netshot device structure: " . json_encode(array_keys($sampleDevice)));
                 
                 // Check for IP address fields in the sample device
-                $ipFields = ['mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
+                $ipFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
                 foreach ($ipFields as $field) {
                     if (isset($sampleDevice[$field])) {
                         error_log("Found IP field in Netshot data: '$field' with value: " . $sampleDevice[$field]);
@@ -369,7 +369,7 @@ class NetshotAPI {
                         error_log("Found fuzzy hostname match: " . $device['name'] . " for query: " . $hostname);
                         
                         // Check IP field
-                        $ipFields = ['mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
+                        $ipFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
                         foreach ($ipFields as $field) {
                             if (isset($device[$field]) && !empty($device[$field])) {
                                 error_log("IP field '$field' contains: " . $device[$field]);
