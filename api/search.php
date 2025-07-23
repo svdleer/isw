@@ -233,10 +233,9 @@ try {
             $searchQuery = str_replace('*', '%', $searchQuery);
             
             // Query that gets only active devices - using only hostname/alias fields
-            // Only selecting hostname and adding empty ip_address field
+            // Only selecting hostname
             $sql = "SELECT 
-                   a.hostname, 
-                   '' as ip_address
+                   a.hostname
                    FROM access.devicesnew a 
                    LEFT JOIN reporting.acc_alias b ON UPPER(a.hostname) = UPPER(b.ccap_name)
                    WHERE (UPPER(a.hostname) LIKE UPPER(?) OR UPPER(COALESCE(b.alias, '')) LIKE UPPER(?))
@@ -247,7 +246,58 @@ try {
             error_log("Executing SQL query: " . $sql);
             error_log("With parameters: " . json_encode([$searchQuery, $searchQuery]));
             
-            $results = $db->query($sql, [$searchQuery, $searchQuery]);
+            $dbResults = $db->query($sql, [$searchQuery, $searchQuery]);
+            
+            // For each hostname found, check Netshot for IP address
+            $results = [];
+            foreach ($dbResults as $device) {
+                $hostname = $device['hostname'];
+                $deviceWithIp = ['hostname' => $hostname, 'ip_address' => ''];
+                
+                // Try to find IP in Netshot by hostname
+                error_log("Looking up IP for hostname in Netshot: " . $hostname);
+                $netshotDevice = $netshot->getDeviceByHostname($hostname);
+                
+                if ($netshotDevice && isset($netshotDevice['mgmtIp'])) {
+                    error_log("Found IP in Netshot for hostname " . $hostname . ": " . $netshotDevice['mgmtIp']);
+                    $deviceWithIp['ip_address'] = $netshotDevice['mgmtIp'];
+                    $deviceWithIp['netshot'] = [
+                        'id' => $netshotDevice['id'] ?? null,
+                        'name' => $netshotDevice['name'] ?? null,
+                        'ip' => $netshotDevice['mgmtIp'] ?? null,
+                        'model' => $netshotDevice['family'] ?? null,
+                        'vendor' => $netshotDevice['domain'] ?? null,
+                        'status' => $netshotDevice['status'] ?? null
+                    ];
+                } else {
+                    // Check if an alias might match instead
+                    error_log("Checking for alias matches in Netshot for: " . $hostname);
+                    $devices = $netshot->getDevicesInGroup();
+                    foreach ($devices as $potentialMatch) {
+                        // Simple check: does the hostname contain our search term or vice versa
+                        $deviceName = strtoupper($potentialMatch['name'] ?? '');
+                        if (!empty($deviceName) && 
+                            (strpos($deviceName, strtoupper($hostname)) !== false || 
+                             strpos(strtoupper($hostname), $deviceName) !== false)) {
+                            error_log("Found potential alias match in Netshot: " . $potentialMatch['name']);
+                            if (isset($potentialMatch['mgmtIp'])) {
+                                $deviceWithIp['ip_address'] = $potentialMatch['mgmtIp'];
+                                $deviceWithIp['netshot'] = [
+                                    'id' => $potentialMatch['id'] ?? null,
+                                    'name' => $potentialMatch['name'] ?? null,
+                                    'ip' => $potentialMatch['mgmtIp'] ?? null,
+                                    'model' => $potentialMatch['family'] ?? null,
+                                    'vendor' => $potentialMatch['domain'] ?? null,
+                                    'status' => $potentialMatch['status'] ?? null
+                                ];
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                $results[] = $deviceWithIp;
+            }
             break;
             
         case 'ip':

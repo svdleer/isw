@@ -201,15 +201,55 @@ class NetshotAPI {
      * @return array|null Device details or null if not found
      */
     public function getDeviceByHostname($hostname) {
-        $devices = $this->getDevicesInGroup();
-        
-        foreach ($devices as $device) {
-            if (isset($device['name']) && strtoupper($device['name']) === strtoupper($hostname)) {
-                return $device;
+        try {
+            // Check cache first
+            $cacheKey = "device_hostname_" . strtolower($hostname);
+            $cachedResult = $this->getFromCache($cacheKey);
+            if ($cachedResult !== false) {
+                error_log("Using cached Netshot data for hostname: " . $hostname);
+                return $cachedResult;
             }
+            
+            $devices = $this->getDevicesInGroup();
+            
+            // First try exact match
+            foreach ($devices as $device) {
+                if (isset($device['name']) && strtoupper($device['name']) === strtoupper($hostname)) {
+                    // Save to cache
+                    $this->saveToCache($cacheKey, $device);
+                    return $device;
+                }
+            }
+            
+            // If exact match failed, try partial/fuzzy matching
+            // Common scenarios: device name might have prefix/suffix or use different delimiter
+            foreach ($devices as $device) {
+                if (!isset($device['name'])) {
+                    continue;
+                }
+                
+                $deviceName = strtoupper($device['name']);
+                $searchName = strtoupper($hostname);
+                
+                // Check if one contains the other
+                if (strpos($deviceName, $searchName) !== false || strpos($searchName, $deviceName) !== false) {
+                    // Check for CCAP in both names as extra verification
+                    if (strpos($deviceName, 'CCAP') !== false && strpos($searchName, 'CCAP') !== false) {
+                        error_log("Found fuzzy hostname match: " . $device['name'] . " for query: " . $hostname);
+                        // Save to cache
+                        $this->saveToCache($cacheKey, $device);
+                        return $device;
+                    }
+                }
+            }
+            
+            // No match found - cache null result to prevent repeated lookups
+            $this->saveToCache($cacheKey, null);
+            return null;
+        } catch (Exception $e) {
+            error_log("Error in getDeviceByHostname: " . $e->getMessage());
+            return null;
         }
-        
-        return null;
     }
     
     /**
