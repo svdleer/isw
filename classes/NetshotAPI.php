@@ -207,25 +207,45 @@ class NetshotAPI {
      * @return array|null Device details or null if not found
      */
     public function getDeviceByIP($ipAddress) {
-        $devices = $this->getDevicesInGroup();
-        
-        foreach ($devices as $device) {
-            if (isset($device['mgmtIp']) && $device['mgmtIp'] === $ipAddress) {
-                // Format the response consistently
-                return [
-                    'id' => $device['id'] ?? null,
-                    'name' => $device['name'] ?? null,
-                    'ip' => $device['mgmtIp'] ?? $ipAddress,
-                    'model' => $device['family'] ?? null,
-                    'vendor' => $device['domain'] ?? null,
-                    'status' => $device['status'] ?? null,
-                    'software_version' => $device['softwareVersion'] ?? null,
-                    'last_check' => $device['lastCheck'] ?? null
-                ];
+        try {
+            // Check cache first
+            $cacheKey = "device_ip_" . $ipAddress;
+            $cachedResult = $this->getFromCache($cacheKey);
+            if ($cachedResult !== false) {
+                error_log("Using cached Netshot data for IP: " . $ipAddress);
+                return $cachedResult;
             }
+            
+            error_log("Fetching devices from Netshot for IP lookup: " . $ipAddress);
+            $devices = $this->getDevicesInGroup();
+            
+            foreach ($devices as $device) {
+                if (isset($device['mgmtIp']) && $device['mgmtIp'] === $ipAddress) {
+                    // Format the response consistently
+                    $result = [
+                        'id' => $device['id'] ?? null,
+                        'name' => $device['name'] ?? null,
+                        'ip' => $device['mgmtIp'] ?? $ipAddress,
+                        'model' => $device['family'] ?? null,
+                        'vendor' => $device['domain'] ?? null,
+                        'status' => $device['status'] ?? null,
+                        'software_version' => $device['softwareVersion'] ?? null,
+                        'last_check' => $device['lastCheck'] ?? null
+                    ];
+                    
+                    // Save to cache
+                    $this->saveToCache($cacheKey, $result);
+                    return $result;
+                }
+            }
+            
+            // Device not found - cache null result to prevent repeated lookups
+            $this->saveToCache($cacheKey, null);
+            return null;
+        } catch (Exception $e) {
+            error_log("Error in getDeviceByIP: " . $e->getMessage());
+            return null;
         }
-        
-        return null;
     }
     
     /**

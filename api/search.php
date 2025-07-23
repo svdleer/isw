@@ -233,7 +233,7 @@ try {
             $searchQuery = str_replace('*', '%', $searchQuery);
             
             // Query that gets only active devices 
-            $sql = "SELECT a.hostname, a.ip_address, a.description, 
+            $sql = "SELECT a.hostname, a.ipaddress as ip_address, a.description, 
                    a.created_at, a.updated_at, a.location
                    FROM access.devicesnew a 
                    LEFT JOIN reporting.acc_alias b ON UPPER(a.hostname) = UPPER(b.ccap_name)
@@ -269,41 +269,50 @@ try {
             // SQL query for IP search - only return active devices
             if (strpos($searchQuery, '%') !== false) {
                 // Wildcard search
-                $sql = "SELECT a.hostname, a.ip_address, a.description,
+                $sql = "SELECT a.hostname, a.ipaddress as ip_address, a.description,
                        a.created_at, a.updated_at, a.location
                        FROM access.devicesnew a
-                       WHERE a.ip_address LIKE ? 
+                       WHERE a.ipaddress LIKE ? 
                        AND a.active = 1
-                       ORDER BY a.ip_address";
+                       ORDER BY a.ipaddress";
                 $results = $db->query($sql, [$searchQuery]);
             } else {
                 // Exact search
-                $sql = "SELECT a.hostname, a.ip_address, a.description,
+                $sql = "SELECT a.hostname, a.ipaddress as ip_address, a.description,
                        a.created_at, a.updated_at, a.location
                        FROM access.devicesnew a
-                       WHERE a.ip_address = ? 
+                       WHERE a.ipaddress = ? 
                        AND a.active = 1
-                       ORDER BY a.ip_address";
+                       ORDER BY a.ipaddress";
                 $results = $db->query($sql, [$searchQuery]);
                 
                 // Check Netshot API for additional device information
-                $netshotDevice = $netshot->getDeviceByIP($searchQuery);
-                if ($netshotDevice) {
-                    // If we have results from our database, enhance them with Netshot data
-                    if (!empty($results)) {
-                        foreach ($results as &$device) {
-                            $device['netshot'] = $netshotDevice;
+                try {
+                    error_log("Looking up IP " . $searchQuery . " in Netshot");
+                    $netshotDevice = $netshot->getDeviceByIP($searchQuery);
+                    if ($netshotDevice) {
+                        error_log("Device found in Netshot: " . ($netshotDevice['name'] ?? 'unknown'));
+                        // If we have results from our database, enhance them with Netshot data
+                        if (!empty($results)) {
+                            foreach ($results as &$device) {
+                                $device['netshot'] = $netshotDevice;
+                            }
+                        } 
+                        // If no results from our database, but device found in Netshot
+                        else {
+                            $results[] = [
+                                'hostname' => $netshotDevice['name'] ?? 'Unknown',
+                                'ip_address' => $searchQuery,
+                                'description' => 'Device found in Netshot',
+                                'netshot' => $netshotDevice
+                            ];
                         }
-                    } 
-                    // If no results from our database, but device found in Netshot
-                    else {
-                        $results[] = [
-                            'hostname' => $netshotDevice['name'] ?? 'Unknown',
-                            'ip_address' => $searchQuery,
-                            'description' => 'Device found in Netshot',
-                            'netshot' => $netshotDevice
-                        ];
+                    } else {
+                        error_log("No device found in Netshot for IP: " . $searchQuery);
                     }
+                } catch (Exception $e) {
+                    // Log the error but don't interrupt the response
+                    error_log("Error querying Netshot API: " . $e->getMessage());
                 }
             }
             break;
