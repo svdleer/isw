@@ -51,12 +51,12 @@ api_call() {
 
 # Test 1: IP exact search (should use Netshot API)
 echo -e "\n1. Testing IP exact search via Netshot..."
-IP_TO_TEST="192.168.1.100"  # Replace with a real IP in your Netshot system
+IP_TO_TEST="172.16.52.2"  # Try a more likely IP based on generateIpFromHostname logic
 api_call "/api/search" "?type=ip&q=$IP_TO_TEST" | jq '.'
 
 # Test 2: IP wildcard search via Netshot
 echo -e "\n2. Testing IP wildcard search via Netshot..."
-IP_PATTERN="192.168.1.*"  # Replace with a suitable IP pattern for your environment
+IP_PATTERN="172.16.*.*"  # Pattern based on hostname-to-IP mapping logic
 api_call "/api/search" "?type=ip&q=$IP_PATTERN" | jq '.'
 
 # Test 3: JSON body request for IP search

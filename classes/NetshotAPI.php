@@ -42,20 +42,19 @@ class NetshotAPI {
     }
 
     /**
-     * Get devices from a specific group
+     * Get all groups from Netshot
      * 
-     * @param int $groupId The ID of the group to fetch devices from
-     * @return array Devices in the specified group
+     * @return array List of groups
      */
-    public function getDevicesInGroup($groupId = 207) {
+    public function getGroups() {
         // Check cache first
-        $cacheKey = "devices_group_{$groupId}";
+        $cacheKey = "netshot_groups";
         $cachedResult = $this->getFromCache($cacheKey);
         if ($cachedResult !== false) {
             return $cachedResult;
         }
         
-        $url = "{$this->apiUrl}/devices?group={$groupId}";
+        $url = "{$this->apiUrl}/groups";
         
         try {
             $ch = curl_init();
@@ -66,20 +65,105 @@ class NetshotAPI {
                 'Accept: application/json',
                 'Content-Type: application/json'
             ]);
-            // Skip SSL verification in development (remove this in production)
+            // Skip SSL verification for development environments
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
             
             $response = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             
             if ($httpCode !== 200) {
-                error_log("Netshot API error: HTTP {$httpCode} - " . curl_error($ch));
+                error_log("Netshot API error getting groups: HTTP {$httpCode} - " . curl_error($ch));
+                return [];
+            }
+            
+            curl_close($ch);
+            
+            $groups = json_decode($response, true) ?: [];
+            
+            error_log("Retrieved " . count($groups) . " groups from Netshot");
+            
+            // Cache the results
+            $this->saveToCache($cacheKey, $groups);
+            
+            return $groups;
+        } catch (Exception $e) {
+            error_log("Exception in getGroups: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Find a group ID by name
+     * 
+     * @param string $groupName The name of the group to find
+     * @return int|null The group ID if found, null otherwise
+     */
+    public function findGroupIdByName($groupName = 'ACCESS') {
+        $groups = $this->getGroups();
+        
+        foreach ($groups as $group) {
+            if (isset($group['name']) && strpos($group['name'], $groupName) !== false) {
+                error_log("Found Netshot group: {$group['name']} with ID {$group['id']}");
+                return $group['id'];
+            }
+        }
+        
+        error_log("Group '{$groupName}' not found in Netshot");
+        return null;
+    }
+    
+    /**
+     * Get devices from a specific group
+     * 
+     * @param int|null $groupId The ID of the group to fetch devices from
+     * @return array Devices in the specified group
+     */
+    public function getDevicesInGroup($groupId = null) {
+        // If no group ID is provided, try to find the ACCESS group
+        if ($groupId === null) {
+            $groupId = $this->findGroupIdByName('ACCESS');
+            if ($groupId === null) {
+                error_log("No ACCESS group found in Netshot, using fallback");
+                $groupId = 207; // Fallback to default group ID
+            }
+        }
+        
+        // Check cache first
+        $cacheKey = "devices_group_{$groupId}";
+        $cachedResult = $this->getFromCache($cacheKey);
+        if ($cachedResult !== false) {
+            return $cachedResult;
+        }
+        
+        $url = "{$this->apiUrl}/devices?group={$groupId}";
+        error_log("Querying Netshot for devices in group {$groupId}: {$url}");
+        
+        try {
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'X-Netshot-API-Token: ' . $this->apiKey,
+                'Accept: application/json',
+                'Content-Type: application/json'
+            ]);
+            // Skip SSL verification for development environments
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            
+            if ($httpCode !== 200) {
+                error_log("Netshot API error: HTTP {$httpCode} - " . curl_error($ch) . " - URL: {$url}");
                 return [];
             }
             
             curl_close($ch);
             
             $result = json_decode($response, true) ?: [];
+            error_log("Retrieved " . count($result) . " devices from Netshot group {$groupId}");
             
             // Save to cache
             $this->saveToCache($cacheKey, $result);

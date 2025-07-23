@@ -18,10 +18,18 @@ $apiUrl = $_ENV['NETSHOT_URL'] ?? $_ENV['NETSHOT_API_URL'] ?? $_ENV['NETSHOT_OSS
 
 // Use the server URL from your code snippet if environment variables aren't set
 if ($apiUrl == 'https://netshot.oss.local/api' && !isset($_ENV['NETSHOT_URL'])) {
-    $apiUrl = 'https://netshot.oss.local'; // Remove /api as it might be added in the test
+    $apiUrl = 'https://netshot.oss.local'; // Base URL
+}
+
+// Make sure URL ends with /api
+if (substr($apiUrl, -4) !== '/api') {
+    $apiUrl .= '/api';
 }
 
 $apiKey = $_ENV['NETSHOT_API_KEY'] ?? $_ENV['NETSHOT_API_TOKEN'] ?? $_ENV['NETSHOT_OSS_TOKEN'] ?? 'UqRf6NkgvKru3rxRRrRKck1VoANQJvP2';
+
+// Get the group name (default to ACCESS as per your Python code)
+$groupName = $_ENV['NETSHOT_GROUP'] ?? 'ACCESS';
 
 // Create a function to test different Netshot API URLs
 function testNetshotConnection($url, $apiKey) {
@@ -90,9 +98,66 @@ $groupParam = isset($_ENV['NETSHOT_GROUP']) ? $_ENV['NETSHOT_GROUP'] : 'ACCESS';
 
 echo "=== Netshot API Connection Test ===\n";
 
-// Test the configured URL
-echo "\nTesting with configured URL:\n";
-testNetshotConnection($configuredUrl, $configuredKey);
+// Create a NetshotAPI instance
+$netshot = new NetshotAPI($apiUrl, $apiKey);
+
+echo "\n=== Testing Netshot API Integration ===\n";
+echo "API URL: {$apiUrl}\n";
+echo "API Key: " . substr($apiKey, 0, 5) . "..." . substr($apiKey, -5) . "\n";
+echo "Group Name: {$groupName}\n\n";
+
+// Test 1: Get Groups
+echo "1. Testing getting groups from Netshot...\n";
+$groups = $netshot->getGroups();
+echo "Found " . count($groups) . " groups in Netshot\n";
+if (!empty($groups)) {
+    echo "Sample groups: \n";
+    $sampleCount = min(3, count($groups));
+    for ($i = 0; $i < $sampleCount; $i++) {
+        echo "  - " . $groups[$i]['name'] . " (ID: " . $groups[$i]['id'] . ")\n";
+    }
+}
+
+// Test 2: Find Group ID by Name
+echo "\n2. Finding group ID for '{$groupName}'...\n";
+$groupId = $netshot->findGroupIdByName($groupName);
+if ($groupId) {
+    echo "Found group ID: {$groupId}\n";
+} else {
+    echo "Group '{$groupName}' not found in Netshot\n";
+}
+
+// Test 3: Get Devices in Group
+echo "\n3. Getting devices for group ID: " . ($groupId ?: 'default') . "\n";
+$devices = $netshot->getDevicesInGroup($groupId);
+echo "Found " . count($devices) . " devices in group\n";
+if (!empty($devices)) {
+    echo "Sample devices: \n";
+    $sampleCount = min(3, count($devices));
+    for ($i = 0; $i < $sampleCount; $i++) {
+        echo "  - " . ($devices[$i]['name'] ?? 'Unnamed') . 
+             " (IP: " . ($devices[$i]['mgmtIp'] ?? $devices[$i]['ip'] ?? 'Unknown') . ")\n";
+    }
+}
+
+// Test 4: Lookup specific hostname
+$hostname = "GV-RC0052-CCAP002"; // From previous error log
+echo "\n4. Looking up hostname: {$hostname}\n";
+$device = $netshot->getDeviceByHostname($hostname);
+if ($device) {
+    echo "Found device in Netshot:\n";
+    echo "  Name: " . ($device['name'] ?? 'Unknown') . "\n";
+    echo "  IP: " . ($device['mgmtIp'] ?? $device['ip'] ?? 'Unknown') . "\n";
+    echo "  Domain: " . ($device['domain'] ?? 'Unknown') . "\n";
+    echo "  Family: " . ($device['family'] ?? 'Unknown') . "\n";
+    echo "  Status: " . ($device['status'] ?? 'Unknown') . "\n";
+} else {
+    echo "Hostname not found in Netshot\n";
+}
+
+// Test the configured URL directly with curl
+echo "\n5. Testing direct API connection with curl:\n";
+testNetshotConnection($apiUrl, $apiKey);
 
 // Try some alternative URLs if the primary one fails
 echo "\nTrying alternative URLs:\n";
