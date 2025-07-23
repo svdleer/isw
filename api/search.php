@@ -305,21 +305,21 @@ try {
                 error_log("Error running diagnostic queries: " . $e->getMessage());
             }
             
-            // Updated SQL query based on actual database structure
+            // Updated SQL query based on actual database structure with direct string interpolation
             // Not using loopbackip since it's not useful
+            $escapedSearchQuery = str_replace("'", "''", $searchQuery); // Basic SQL escaping for the LIKE clause
             $sql = "SELECT 
                    UPPER(a.hostname) as hostname
                    FROM access.devicesnew a 
                    LEFT JOIN reporting.acc_alias b ON a.hostname = b.ccap_name
-                   WHERE (a.hostname LIKE ? OR b.alias LIKE ?)
+                   WHERE (a.hostname LIKE '$escapedSearchQuery' OR b.alias LIKE '$escapedSearchQuery')
                    AND a.active = 1
                    ORDER BY a.hostname";
             
-            // Debug: Log the SQL query and parameters
-            error_log("Executing SQL query: " . $sql);
-            error_log("With parameters: " . json_encode([$searchQuery, $searchQuery]));
+            // Debug: Log the SQL query with interpolated parameters
+            error_log("Executing SQL query with interpolated parameters: " . $sql);
             
-            $dbResults = $db->query($sql, [$searchQuery, $searchQuery]);
+            $dbResults = $db->query($sql);
             
             // Log the number of results found
             error_log("Database query returned " . count($dbResults) . " results for hostname search: " . $searchQuery);
@@ -487,13 +487,14 @@ try {
                         if (!empty($hostnameResults)) {
                             foreach ($hostnameResults as $hostname) {
                                 // For each hostname found, do a hostname search in our database
+                                $escapedHostname = str_replace("'", "''", $hostname); // Basic SQL escaping
                                 $sql = "SELECT 
                                        a.hostname, 
                                        '' as ip_address
                                        FROM access.devicesnew a 
-                                       WHERE UPPER(a.hostname) = UPPER(?)
+                                       WHERE UPPER(a.hostname) = UPPER('$escapedHostname')
                                        AND a.active = 1";
-                                $dbResults = $db->query($sql, [$hostname]);
+                                $dbResults = $db->query($sql);
                                 
                                 if (!empty($dbResults)) {
                                     foreach ($dbResults as $dbDevice) {
@@ -514,6 +515,33 @@ try {
                 
                 // Not using database loopbackip field as it's not useful
                 error_log("Skipping database loopbackip wildcard lookup as it's not useful. Relying only on Netshot.");
+                
+                // Attempt to search hostnames in the database that might match this IP pattern
+                try {
+                    // Try to find devices with hostnames that might match our IP pattern
+                    $ipSearchParts = explode('.', str_replace('%', '', $searchQuery));
+                    if (!empty($ipSearchParts[0])) {
+                        $escapedIpPart = str_replace("'", "''", $ipSearchParts[0]);
+                        $sql = "SELECT 
+                               UPPER(hostname) as hostname
+                               FROM access.devicesnew 
+                               WHERE hostname LIKE '%$escapedIpPart%' 
+                               AND active = 1";
+                        error_log("Executing IP-based hostname search: " . $sql);
+                        $ipDbResults = $db->query($sql);
+                        
+                        if (!empty($ipDbResults)) {
+                            foreach ($ipDbResults as $device) {
+                                $results[] = [
+                                    'hostname' => $device['hostname'],
+                                    'ip_address' => $searchQuery
+                                ];
+                            }
+                        }
+                    }
+                } catch (Exception $e) {
+                    error_log("Error looking up hostnames for IP pattern: " . $e->getMessage());
+                }
                 
                 // Then, also check Netshot for additional results
                 error_log("Also checking Netshot for wildcard IP: " . $searchQuery);
