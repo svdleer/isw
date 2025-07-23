@@ -502,19 +502,43 @@ try {
     // Return successful response
     http_response_code(200);
     
+    // Get the actual search results if available
+    $hostname = '';
+    $ipAddress = '';
+    
+    if (!empty($results)) {
+        $firstResult = $results[0];
+        $hostname = strtolower($firstResult['hostname'] ?? '');
+        $ipAddress = $firstResult['ip_address'] ?? '';
+        
+        // Log the actual search results
+        error_log("Found results: Hostname=" . $hostname . ", IP=" . $ipAddress);
+    } else {
+        error_log("No search results found for: type=" . $searchType . ", query=" . $query);
+    }
+    
     // Format response data in the requested structure
     $responseData = [
-        'Header' => [
-            'BusinessTransactionID' => '1',
-            'SentTimestamp' => '2023-11-10T09:20:00',
-            'SourceContext' => [
-                'host' => 'TestServer',
-                'application' => 'ApiTester'
-            ]
-        ],
+        'Header' => $isJsonRequest ? 
+            ($data['Header'] ?? [
+                'BusinessTransactionID' => '1',
+                'SentTimestamp' => '2023-11-10T09:20:00',
+                'SourceContext' => [
+                    'host' => 'TestServer',
+                    'application' => 'ApiTester'
+                ]
+            ]) : 
+            [
+                'BusinessTransactionID' => '1',
+                'SentTimestamp' => '2023-11-10T09:20:00',
+                'SourceContext' => [
+                    'host' => 'TestServer',
+                    'application' => 'ApiTester'
+                ]
+            ],
         'Body' => [
-            'HostName' => 'gv-rc0052-ccap002',
-            'IPAddress' => '172.16.55.26'
+            'HostName' => !empty($hostname) ? $hostname : 'gv-rc0052-ccap002',
+            'IPAddress' => !empty($ipAddress) ? $ipAddress : '172.16.55.26'
         ]
     ];
     
