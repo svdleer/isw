@@ -1,0 +1,604 @@
+{
+	"info": {
+		"_postman_id": "c7e5d7d1-6a2e-45d6-9eb7-1a7e7c9f3f8b",
+		"name": "ISW CMDB API Tests",
+		"description": "Test collection for ISW CMDB API with various JSON body requests",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Hostname Search Tests",
+			"item": [
+				{
+					"name": "Exact hostname search",
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "password",
+									"value": "password",
+									"type": "string"
+								},
+								{
+									"key": "username",
+									"value": "admin",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Header\": {\n    \"BusinessTransactionID\": \"1\",\n    \"SentTimestamp\": \"2023-11-10T09:20:00\",\n    \"SourceContext\": {\n      \"host\": \"TestServer\",\n      \"application\": \"ApiTester\"\n    }\n  },\n  \"Body\": {\n    \"HostName\": \"GV-RC0011-CCAP003\"\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost/isw/api/search",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"path": [
+								"isw",
+								"api",
+								"search"
+							]
+						},
+						"description": "Search by exact hostname"
+					},
+					"response": []
+				},
+				{
+					"name": "Wildcard hostname search (all CCAP devices)",
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "password",
+									"value": "password",
+									"type": "string"
+								},
+								{
+									"key": "username",
+									"value": "admin",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Header\": {\n    \"BusinessTransactionID\": \"2\",\n    \"SentTimestamp\": \"2023-11-10T09:30:00\",\n    \"SourceContext\": {\n      \"host\": \"TestServer\",\n      \"application\": \"ApiTester\"\n    }\n  },\n  \"Body\": {\n    \"HostName\": \"*\"\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost/isw/api/search",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"path": [
+								"isw",
+								"api",
+								"search"
+							]
+						},
+						"description": "Search for all CCAP devices"
+					},
+					"response": []
+				},
+				{
+					"name": "Partial hostname search with CCAP",
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "password",
+									"value": "password",
+									"type": "string"
+								},
+								{
+									"key": "username",
+									"value": "admin",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Header\": {\n    \"BusinessTransactionID\": \"3\",\n    \"SentTimestamp\": \"2023-11-10T09:40:00\",\n    \"SourceContext\": {\n      \"host\": \"TestServer\",\n      \"application\": \"ApiTester\"\n    }\n  },\n  \"Body\": {\n    \"HostName\": \"CCAP*\"\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost/isw/api/search",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"path": [
+								"isw",
+								"api",
+								"search"
+							]
+						},
+						"description": "Search with CCAP wildcard"
+					},
+					"response": []
+				},
+				{
+					"name": "Partial hostname search (auto-adds CCAP)",
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "password",
+									"value": "password",
+									"type": "string"
+								},
+								{
+									"key": "username",
+									"value": "admin",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Header\": {\n    \"BusinessTransactionID\": \"4\",\n    \"SentTimestamp\": \"2023-11-10T09:50:00\",\n    \"SourceContext\": {\n      \"host\": \"TestServer\",\n      \"application\": \"ApiTester\"\n    }\n  },\n  \"Body\": {\n    \"HostName\": \"GV-RC\"\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost/isw/api/search",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"path": [
+								"isw",
+								"api",
+								"search"
+							]
+						},
+						"description": "Search that should auto-add CCAP to the search"
+					},
+					"response": []
+				},
+				{
+					"name": "Complex wildcard hostname search",
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "password",
+									"value": "password",
+									"type": "string"
+								},
+								{
+									"key": "username",
+									"value": "admin",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Header\": {\n    \"BusinessTransactionID\": \"5\",\n    \"SentTimestamp\": \"2023-11-10T10:00:00\",\n    \"SourceContext\": {\n      \"host\": \"TestServer\",\n      \"application\": \"ApiTester\"\n    }\n  },\n  \"Body\": {\n    \"HostName\": \"*CCAP*003\"\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost/isw/api/search",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"path": [
+								"isw",
+								"api",
+								"search"
+							]
+						},
+						"description": "Complex search pattern"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "IP Address Search Tests",
+			"item": [
+				{
+					"name": "Exact IP address search",
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "password",
+									"value": "password",
+									"type": "string"
+								},
+								{
+									"key": "username",
+									"value": "admin",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Header\": {\n    \"BusinessTransactionID\": \"6\",\n    \"SentTimestamp\": \"2023-11-10T10:10:00\",\n    \"SourceContext\": {\n      \"host\": \"TestServer\",\n      \"application\": \"ApiTester\"\n    }\n  },\n  \"Body\": {\n    \"IPAddress\": \"172.16.55.26\"\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost/isw/api/search",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"path": [
+								"isw",
+								"api",
+								"search"
+							]
+						},
+						"description": "Search for exact IP address"
+					},
+					"response": []
+				},
+				{
+					"name": "Wildcard IP search (last octet)",
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "password",
+									"value": "password",
+									"type": "string"
+								},
+								{
+									"key": "username",
+									"value": "admin",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Header\": {\n    \"BusinessTransactionID\": \"7\",\n    \"SentTimestamp\": \"2023-11-10T10:20:00\",\n    \"SourceContext\": {\n      \"host\": \"TestServer\",\n      \"application\": \"ApiTester\"\n    }\n  },\n  \"Body\": {\n    \"IPAddress\": \"172.16.55.*\"\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost/isw/api/search",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"path": [
+								"isw",
+								"api",
+								"search"
+							]
+						},
+						"description": "Search for IP with wildcard in last octet"
+					},
+					"response": []
+				},
+				{
+					"name": "Wildcard IP search (third octet)",
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "password",
+									"value": "password",
+									"type": "string"
+								},
+								{
+									"key": "username",
+									"value": "admin",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Header\": {\n    \"BusinessTransactionID\": \"8\",\n    \"SentTimestamp\": \"2023-11-10T10:30:00\",\n    \"SourceContext\": {\n      \"host\": \"TestServer\",\n      \"application\": \"ApiTester\"\n    }\n  },\n  \"Body\": {\n    \"IPAddress\": \"172.16.*.26\"\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost/isw/api/search",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"path": [
+								"isw",
+								"api",
+								"search"
+							]
+						},
+						"description": "Search for IP with wildcard in third octet"
+					},
+					"response": []
+				},
+				{
+					"name": "Multiple wildcards in IP search",
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "password",
+									"value": "password",
+									"type": "string"
+								},
+								{
+									"key": "username",
+									"value": "admin",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Header\": {\n    \"BusinessTransactionID\": \"9\",\n    \"SentTimestamp\": \"2023-11-10T10:40:00\",\n    \"SourceContext\": {\n      \"host\": \"TestServer\",\n      \"application\": \"ApiTester\"\n    }\n  },\n  \"Body\": {\n    \"IPAddress\": \"172.*.*.26\"\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost/isw/api/search",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"path": [
+								"isw",
+								"api",
+								"search"
+							]
+						},
+						"description": "Search with multiple wildcards"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Error Test Cases",
+			"item": [
+				{
+					"name": "Missing required body field",
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "password",
+									"value": "password",
+									"type": "string"
+								},
+								{
+									"key": "username",
+									"value": "admin",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Header\": {\n    \"BusinessTransactionID\": \"10\",\n    \"SentTimestamp\": \"2023-11-10T10:50:00\",\n    \"SourceContext\": {\n      \"host\": \"TestServer\",\n      \"application\": \"ApiTester\"\n    }\n  },\n  \"Body\": {\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost/isw/api/search",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"path": [
+								"isw",
+								"api",
+								"search"
+							]
+						},
+						"description": "Test with missing required field"
+					},
+					"response": []
+				},
+				{
+					"name": "Invalid IP address format",
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "password",
+									"value": "password",
+									"type": "string"
+								},
+								{
+									"key": "username",
+									"value": "admin",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Header\": {\n    \"BusinessTransactionID\": \"11\",\n    \"SentTimestamp\": \"2023-11-10T11:00:00\",\n    \"SourceContext\": {\n      \"host\": \"TestServer\",\n      \"application\": \"ApiTester\"\n    }\n  },\n  \"Body\": {\n    \"IPAddress\": \"172.16.256.1\"\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost/isw/api/search",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"path": [
+								"isw",
+								"api",
+								"search"
+							]
+						},
+						"description": "Test with invalid IP address"
+					},
+					"response": []
+				},
+				{
+					"name": "Invalid field name",
+					"request": {
+						"auth": {
+							"type": "basic",
+							"basic": [
+								{
+									"key": "password",
+									"value": "password",
+									"type": "string"
+								},
+								{
+									"key": "username",
+									"value": "admin",
+									"type": "string"
+								}
+							]
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Header\": {\n    \"BusinessTransactionID\": \"12\",\n    \"SentTimestamp\": \"2023-11-10T11:10:00\",\n    \"SourceContext\": {\n      \"host\": \"TestServer\",\n      \"application\": \"ApiTester\"\n    }\n  },\n  \"Body\": {\n    \"InvalidField\": \"GV-RC0011-CCAP003\"\n  }\n}"
+						},
+						"url": {
+							"raw": "http://localhost/isw/api/search",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"path": [
+								"isw",
+								"api",
+								"search"
+							]
+						},
+						"description": "Test with invalid field name"
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost/isw",
+			"type": "string"
+		}
+	]
+}
