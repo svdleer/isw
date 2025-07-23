@@ -407,9 +407,11 @@ class NetshotAPI {
      * @return string The original hostname or the mapped CCAP hostname
      */
     public function mapAbrToCcapHostname($hostname) {
-        // Check for ABR/DBR/CBR pattern
-        $abrPattern = '/^[a-zA-Z]{2}\d{2}(abr|dbr|cbr)\d{4}$/i';
-        if (!preg_match($abrPattern, $hostname)) {
+        // Check for ABR/DBR/CBR pattern - more flexible to match various formats
+        $abrPattern = '/^[a-zA-Z]{2}\d{2}(abr|dbr|cbr)\d{1,4}$/i';
+        $alternativePattern = '/(abr|dbr|cbr)/i';
+        
+        if (!preg_match($abrPattern, $hostname) && !preg_match($alternativePattern, $hostname)) {
             // Not an ABR/DBR/CBR hostname, return as is
             return $hostname;
         }

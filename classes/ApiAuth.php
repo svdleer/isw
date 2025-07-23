@@ -125,9 +125,16 @@ class ApiAuth {
         }
         
         // Check for ABR/DBR/CBR pattern - now accepting these formats
-        $abrPattern = '/^[a-zA-Z]{2}\d{2}(abr|dbr|cbr)\d{4}$/i';
+        $abrPattern = '/^[a-zA-Z]{2}\d{2}(abr|dbr|cbr)\d{1,4}$/i';
         if (preg_match($abrPattern, $hostname)) {
             error_log("Accepting ABR/DBR/CBR format hostname: " . $hostname);
+            return true;
+        }
+        
+        // Alternative ABR/DBR/CBR pattern - test with less strict pattern
+        // Check if hostname contains abr, dbr, or cbr anywhere in the string
+        if (preg_match('/(abr|dbr|cbr)/i', $hostname)) {
+            error_log("Accepting alternative ABR/DBR/CBR format hostname: " . $hostname);
             return true;
         }
         

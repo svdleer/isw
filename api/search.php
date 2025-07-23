@@ -271,8 +271,10 @@ try {
             
             // Check if this is an ABR/DBR/CBR hostname and try to map it to a CCAP hostname
             $originalQuery = $query;
-            $abrPattern = '/^[a-zA-Z]{2}\d{2}(abr|dbr|cbr)\d{4}$/i';
-            if (preg_match($abrPattern, $originalQuery)) {
+            $abrPattern = '/^[a-zA-Z]{2}\d{2}(abr|dbr|cbr)\d{1,4}$/i';
+            $alternativePattern = '/(abr|dbr|cbr)/i';
+            
+            if (preg_match($abrPattern, $originalQuery) || preg_match($alternativePattern, $originalQuery)) {
                 error_log("ABR/DBR/CBR format hostname detected: " . $originalQuery);
                 
                 // Map ABR/DBR/CBR hostname to CCAP hostname using NetshotAPI's method
