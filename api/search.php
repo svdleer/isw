@@ -557,64 +557,8 @@ try {
                         error_log("Added exact IP result: hostname=" . ($netshotDevice['name'] ?? 'Unknown') . ", ip=" . $deviceIp);
                     } else {
                         error_log("No device found in Netshot for IP: " . $searchQuery);
-                        
-                        // Not using database loopbackip field as it's not useful
-                        error_log("Skipping database loopbackip lookup as it's not useful. Relying on Netshot and fallback algorithm.");
-                        
-                        // We'll rely completely on Netshot or fallback algorithm for IP address information
-                        error_log("Attempting to find device by hostname lookup");
-                        // OPTIMIZATION: Use the devices we already retrieved rather than making another API call
-                        $hostnameResults = [];
-                        
-                        // Search through our Netshot devices for any that have this IP
-                        foreach ($netshotDevices as $device) {
-                            $deviceIp = null;
-                            // Check all possible field names for IP address
-                            $possibleIpFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
-                            foreach ($possibleIpFields as $field) {
-                                if (isset($device[$field])) {
-                                    $ipValue = $device[$field];
-                                    // Handle case where IP is an object with 'ip' field
-                                    if (is_array($ipValue) && isset($ipValue['ip'])) {
-                                        $ipValue = $ipValue['ip'];
-                                    }
-                                    
-                                    if ($ipValue === $searchQuery) {
-                                        // Store both hostname and the actual IP value
-                                        $hostnameResults[] = [
-                                            'hostname' => $device['name'],
-                                            'ip_address' => $ipValue // Use actual IP, not search query
-                                        ];
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                        
-                        if (!empty($hostnameResults)) {
-                            foreach ($hostnameResults as $deviceInfo) {
-                                // For each hostname found, do a hostname search in our database
-                                $escapedHostname = str_replace("'", "''", $deviceInfo['hostname']); // Basic SQL escaping
-                                $sql = "SELECT 
-                                       UPPER(a.hostname) as hostname
-                                       FROM access.devicesnew a 
-                                       WHERE UPPER(a.hostname) = UPPER('$escapedHostname')
-                                       AND a.active = 1";
-                                $dbResults = $db->query($sql);
-                                
-                                if (!empty($dbResults)) {
-                                    foreach ($dbResults as $dbDevice) {
-                                        // Use the IP address we found in Netshot, not empty string
-                                        $results[] = [
-                                            'hostname' => strtoupper($dbDevice['hostname']),
-                                            'ip_address' => $deviceInfo['ip_address'] // Use actual IP from Netshot
-                                        ];
-                                        
-                                        error_log("Added fallback result: hostname=" . $dbDevice['hostname'] . ", ip=" . $deviceInfo['ip_address']);
-                                    }
-                                }
-                            }
-                        }
+                        // No fallback needed - if Netshot doesn't have the device, it likely doesn't exist
+                        // or the IP is not managed. The wildcard search below will handle broader searches.
                     }
                 } catch (Exception $e) {
                     // Log the error but don't interrupt the response
