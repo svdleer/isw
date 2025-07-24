@@ -298,14 +298,14 @@ class NetshotAPI {
     }
     
     /**
-     * Placeholder method for backward compatibility
+     * Clear cache - public method for manual cache clearing
      * 
-     * @param string|null $key The cache key (ignored)
+     * @param string|null $key The cache key (ignored for backward compatibility)
      * @return void
      */
     public function clearCache($key = null) {
-        // Method kept for backward compatibility but does nothing
-        return;
+        $this->clearDeviceCache();
+        error_log("NetshotAPI cache cleared manually");
     }
     
     /**
