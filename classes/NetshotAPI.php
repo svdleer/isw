@@ -698,14 +698,12 @@ class NetshotAPI {
      * @return string Regex pattern
      */
     private function patternToRegex($pattern) {
-        // Replace SQL LIKE wildcards with regex equivalents
-        $pattern = str_replace(['%', '*'], ['.+', '.+'], $pattern);
-        
-        // Escape regex special characters except the ones we just added
+        // First escape regex special characters
         $pattern = preg_quote($pattern, '/');
         
-        // Replace back our wildcards
-        $pattern = str_replace(['\\.+'], ['.+'], $pattern);
+        // Then replace escaped wildcards with regex equivalents
+        // % and * wildcards should match one or more characters
+        $pattern = str_replace(['\\%', '\\*'], ['.*', '.*'], $pattern);
         
         return '/^' . $pattern . '$/i';
     }
