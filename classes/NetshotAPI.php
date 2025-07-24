@@ -715,6 +715,7 @@ class NetshotAPI {
     
     /**
      * Convert SQL LIKE pattern (with % or * wildcards) to a regex pattern
+     * Optimized for IP address matching
      * 
      * @param string $pattern SQL LIKE pattern
      * @return string Regex pattern
@@ -723,11 +724,10 @@ class NetshotAPI {
         // First escape regex special characters
         $pattern = preg_quote($pattern, '/');
         
-        // Then replace wildcards with regex equivalents
-        // % and * wildcards should match zero or more characters
-        // Since % is not escaped by preg_quote, look for unescaped %
-        // Since * is escaped by preg_quote, look for escaped \*
-        $pattern = str_replace(['%', '\\*'], ['.*', '.*'], $pattern);
+        // Then replace wildcards with IP-specific regex equivalents
+        // For IP addresses, * or % should match 1-3 digits (like 192.168.*.* -> 192.168.123.45)
+        // This is more accurate than .* which could match anything
+        $pattern = str_replace(['%', '\\*'], ['\d{1,3}', '\d{1,3}'], $pattern);
         
         return '/^' . $pattern . '$/i';
     }
