@@ -740,14 +740,15 @@ class NetshotAPI {
             // Create database connection
             $db = new Database();
             
-            // Query for the CCAP name using case-insensitive comparison with LOWER()
+            // Query for the CCAP name using case-insensitive comparison with UPPER()
+            // Search both ccap_name and alias columns to handle any input type
             $escapedHostname = str_replace("'", "''", $hostname); // Simple SQL escape
-            $sql = "SELECT UPPER(ccap_name) as hostname FROM reporting.acc_alias WHERE LOWER(alias = '$escapedHostname')";
+            $sql = "SELECT UPPER(ccap_name) as ccap_name FROM reporting.acc_alias WHERE UPPER(ccap_name) = UPPER('$escapedHostname') OR UPPER(alias) = UPPER('$escapedHostname')";
             error_log("Executing database query: " . $sql);
             
             $result = $db->query($sql);
-            if (!empty($result) && isset($result[0]['hostname'])) {
-                $ccapHostname = $result[0]['hostname']; // Already uppercase from query
+            if (!empty($result) && isset($result[0]['ccap_name'])) {
+                $ccapHostname = $result[0]['ccap_name']; // Already uppercase from query
                 error_log("Found corresponding CCAP hostname: " . $ccapHostname . " for ABR/DBR/CBR device: " . $hostname);
                 return $ccapHostname;
             } else {
