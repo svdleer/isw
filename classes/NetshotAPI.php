@@ -375,15 +375,15 @@ class NetshotAPI {
             }
             
             $db = new Database();
-            $sql = "SELECT UPPER(alias) as alias, UPPER(ccap_name) as ccap_name FROM reporting.acc_alias";
+            $sql = "SELECT alias, ccap_name FROM reporting.acc_alias";
             $aliasResults = $db->query($sql);
             
             error_log("NetshotAPI: Retrieved " . count($aliasResults) . " alias mappings from MySQL");
             
             // Create alias-to-IP mapping using the hostname-to-IP map
             foreach ($aliasResults as $aliasRow) {
-                $alias = $aliasRow['alias'];
-                $ccapHostname = $aliasRow['ccap_name'];
+                $alias = strtoupper($aliasRow['alias']); // Convert to uppercase for consistency
+                $ccapHostname = strtoupper($aliasRow['ccap_name']); // Convert to uppercase for consistency
                 
                 // If we have the IP for this CCAP hostname, map it to the alias
                 if (isset($this->hostnameIpMap[$ccapHostname])) {
@@ -740,14 +740,14 @@ class NetshotAPI {
             // Create database connection
             $db = new Database();
             
-            // Query for the CCAP name using UPPER() for case-insensitive comparison
-            $escapedHostname = str_replace("'", "''", strtoupper($hostname)); // Simple SQL escape
-            $sql = "SELECT UPPER(ccap_name) as ccap_name FROM reporting.acc_alias WHERE UPPER(alias) = UPPER('$escapedHostname')";
+            // Query for the CCAP name using case-insensitive comparison with LOWER()
+            $escapedHostname = str_replace("'", "''", strtolower($hostname)); // Simple SQL escape
+            $sql = "SELECT ccap_name FROM reporting.acc_alias WHERE LOWER(alias) = '$escapedHostname'";
             error_log("Executing database query: " . $sql);
             
             $result = $db->query($sql);
             if (!empty($result) && isset($result[0]['ccap_name'])) {
-                $ccapHostname = strtoupper($result[0]['ccap_name']);
+                $ccapHostname = strtoupper($result[0]['ccap_name']); // Return in uppercase for consistency
                 error_log("Found corresponding CCAP hostname: " . $ccapHostname . " for ABR/DBR/CBR device: " . $hostname);
                 return $ccapHostname;
             } else {
@@ -778,13 +778,13 @@ class NetshotAPI {
             $db = new Database();
             
             // Query for aliases that map to this CCAP name
-            $escapedHostname = str_replace("'", "''", strtoupper($ccapHostname)); // Simple SQL escape
-            $sql = "SELECT UPPER(alias) as alias FROM reporting.acc_alias WHERE UPPER(ccap_name) = UPPER('$escapedHostname')";
+            $escapedHostname = str_replace("'", "''", strtolower($ccapHostname)); // Simple SQL escape
+            $sql = "SELECT alias FROM reporting.acc_alias WHERE LOWER(ccap_name) = '$escapedHostname'";
             error_log("Looking up alias for CCAP hostname: $ccapHostname - Query: $sql");
             
             $result = $db->query($sql);
             if (!empty($result) && isset($result[0]['alias'])) {
-                $aliasHostname = strtoupper($result[0]['alias']);
+                $aliasHostname = strtoupper($result[0]['alias']); // Return in uppercase for consistency
                 error_log("Found alias hostname: $aliasHostname for CCAP device: $ccapHostname");
                 return $aliasHostname;
             } else {
