@@ -445,9 +445,9 @@ class NetshotAPI {
             // Create database connection
             $db = new Database();
             
-            // Query for the CCAP name
+            // Query for the CCAP name using UPPER() for case-insensitive comparison
             $escapedHostname = str_replace("'", "''", strtoupper($hostname)); // Simple SQL escape
-            $sql = "SELECT ccap_name FROM reporting.acc_alias WHERE alias = '$escapedHostname'";
+            $sql = "SELECT UPPER(ccap_name) as ccap_name FROM reporting.acc_alias WHERE UPPER(alias) = UPPER('$escapedHostname')";
             error_log("Executing database query: " . $sql);
             
             $result = $db->query($sql);
