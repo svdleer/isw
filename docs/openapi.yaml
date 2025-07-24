@@ -235,50 +235,8 @@ paths:
                         type: object
                       body:
                         type: object
-      parameters:
-        - name: type
-          in: query
-          required: true
-          description: Type of search to perform
-          schema:
-            type: string
-            enum: [hostname, ip]
-          example: hostname
-        - name: q
-          in: query
-          required: true
-          description: Search query string
-          schema:
-            type: string
-          examples:
-            hostname_exact:
-              summary: Exact CCAP hostname search
-              value: GV-RC0011-CCAP003
-            hostname_wildcard:
-              summary: Wildcard CCAP search
-              value: "*CCAP*"
-            alias_exact:
-              summary: Exact alias search
-              value: gv02abr001
-            alias_wildcard:
-              summary: Wildcard alias search
-              value: "*abr*"
-            ip_exact:
-              summary: Exact IP search
-              value: 172.28.88.15
-            ip_wildcard_subnet:
-              summary: Subnet wildcard search
-              value: 172.28.88.*
-            ip_wildcard_network:
-              summary: Network wildcard search
-              value: 172.28.*.*
-        - name: api_key
-          in: query
-          required: false
-          description: API key for authentication (can also be provided via X-API-Key header)
-          schema:
-            type: string
-          example: dev-key-12345
+
+        '400':
       responses:
         '200':
           description: Successful response
