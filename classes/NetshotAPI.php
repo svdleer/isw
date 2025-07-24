@@ -701,9 +701,11 @@ class NetshotAPI {
         // First escape regex special characters
         $pattern = preg_quote($pattern, '/');
         
-        // Then replace escaped wildcards with regex equivalents
-        // % and * wildcards should match one or more characters
-        $pattern = str_replace(['\\%', '\\*'], ['.*', '.*'], $pattern);
+        // Then replace wildcards with regex equivalents
+        // % and * wildcards should match zero or more characters
+        // Since % is not escaped by preg_quote, look for unescaped %
+        // Since * is escaped by preg_quote, look for escaped \*
+        $pattern = str_replace(['%', '\\*'], ['.*', '.*'], $pattern);
         
         return '/^' . $pattern . '$/i';
     }
