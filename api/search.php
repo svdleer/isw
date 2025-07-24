@@ -429,25 +429,8 @@ try {
             // For *CCAP* queries that might return many results, limit Netshot processing to improve performance
             $shouldLimitNetshot = ($isAllCcapSearch && count($dbResults) > 50);
             $maxNetshotLookups = 50; // Limit how many devices we'll look up in Netshot for large result sets
-            $processedNetshot = 0;
             
             error_log("Processing " . count($dbResults) . " devices from database results - will get IP addresses from Netshot");
-            
-            // First process all database results with empty IP addresses
-            foreach ($dbResults as $device) {
-                $hostname = strtoupper($device['hostname']);
-                
-                // Always initialize with empty IP address - will be populated later from Netshot
-                $ipAddress = '';
-                
-                // Log that we'll be looking up IP from Netshot later
-                error_log("Added hostname: " . $hostname . " to results (IP will be looked up from Netshot)");
-                
-                $results[] = [
-                    'hostname' => $hostname, 
-                    'ip_address' => $ipAddress
-                ];
-            }
             
             // Skip Netshot processing for huge result sets
             if ($shouldLimitNetshot) {
@@ -457,6 +440,9 @@ try {
                 // For example: the first $maxNetshotLookups devices
                 $dbResults = array_slice($dbResults, 0, $maxNetshotLookups);
             }
+            
+            // Initialize results array - will be populated with enrichment data
+            $results = [];
             
             // Only if we need Netshot data, make the API call
             if (!empty($dbResults)) {
@@ -481,10 +467,10 @@ try {
                 error_log("Created Netshot device map with " . count($netshotDeviceMap) . " entries in " . 
                           number_format(($endTime - $startTime), 2) . " seconds");
                 
-                // Now process devices to add Netshot data
+                // Now process devices to add Netshot data and populate results array
                 $startTime = microtime(true);
                 foreach ($dbResults as $index => $device) {
-                    $hostname = $device['hostname'];
+                    $hostname = strtoupper($device['hostname']);
                     
                     // Use the proper enrichDeviceData method to get device data including IP address
                     $enrichedDevice = $netshot->enrichDeviceData($device);
@@ -492,148 +478,22 @@ try {
                     // Log the enrichment result
                     error_log("Enriched device data for " . $hostname . ": IP=" . ($enrichedDevice['ip_address'] ?? 'Not found'));
                     
-                    // Replace the original device with the enriched version
-                    $dbResults[$index] = $enrichedDevice;
+                    // Add enriched device directly to results array
+                    $results[] = [
+                        'hostname' => $hostname,
+                        'ip_address' => $enrichedDevice['ip_address'] ?? ''
+                    ];
                     
-                    // IMPORTANT: Update the corresponding entry in the results array with the enriched IP
-                    foreach ($results as $resultIndex => $result) {
-                        if (strtoupper($result['hostname']) === strtoupper($hostname)) {
-                            $results[$resultIndex]['ip_address'] = $enrichedDevice['ip_address'] ?? '';
-                            error_log("Updated results array for " . $hostname . " with IP: " . ($enrichedDevice['ip_address'] ?? 'empty'));
-                            break;
-                        }
-                    }
-                    
-                    // For backwards compatibility, also maintain the old code path but use enriched data
-                    $netshotDevice = $netshotDeviceMap[strtoupper($hostname)] ?? null;
-                    $ipAddress = $enrichedDevice['ip_address'] ?? null;
-                
-                    error_log("Netshot match for " . $hostname . ": " . ($netshotDevice ? "Found" : "Not found") . ", IP: " . ($ipAddress ?: "Not found"));
-                    
-                    // Keep this part for backward compatibility, but we'll prefer the enriched data
-                    if (!$ipAddress && $netshotDevice) {
-                        // Check all possible field names for IP address
-                        $possibleIpFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
-                        foreach ($possibleIpFields as $field) {
-                        if (isset($netshotDevice[$field]) && !empty($netshotDevice[$field])) {
-                            $rawIpValue = $netshotDevice[$field];
-                            
-                            // Handle case where IP is an object with 'ip' field
-                            if (is_array($rawIpValue) && isset($rawIpValue['ip'])) {
-                                $ipAddress = $rawIpValue['ip'];
-                                error_log("Found complex IP object in field '$field', extracted IP: " . $ipAddress);
-                            } else {
-                                $ipAddress = $rawIpValue;
-                                error_log("Found IP in field '$field': " . $ipAddress);
-                            }
-                            break;
-                        }
-                    }
-                    
-                    if ($ipAddress) {
-                        error_log("Found IP in Netshot for hostname " . $hostname . ": " . $ipAddress);
-                        
-                        // Update the result in the results array
-                        foreach ($results as $key => $result) {
-                            if (strtoupper($result['hostname']) === strtoupper($hostname)) {
-                                $results[$key]['ip_address'] = $ipAddress;
-                                // Store the uppercase hostname to ensure consistency
-                                $results[$key]['hostname'] = strtoupper($hostname);
-                                $results[$key]['netshot'] = [
-                                    'id' => $netshotDevice['id'] ?? null,
-                                    'name' => strtoupper($netshotDevice['name'] ?? ''),
-                                    'ip' => $ipAddress,
-                                    'model' => $netshotDevice['family'] ?? null,
-                                    'vendor' => $netshotDevice['domain'] ?? null,
-                                    'status' => $netshotDevice['status'] ?? null
-                                ];
-                                error_log("Updated hostname " . $hostname . " with IP from Netshot: " . $ipAddress);
-                                break;
-                            }
-                        }
-                    } else {
-                        error_log("No IP address found in Netshot device fields for hostname: " . $hostname);
-                    }
-                } else {
-                    // Check for partial/alias matches if no exact match found
-                    error_log("Checking for alias/partial matches in Netshot for: " . $hostname);
-                    
-                    // Look for potential alias matches in our map (without making another API call)
-                    $foundMatch = false;
-                    foreach ($netshotDeviceMap as $deviceName => $potentialMatch) {
-                        // Simple check: does the hostname contain our search term or vice versa
-                        if (strpos($deviceName, strtoupper($hostname)) !== false || 
-                            strpos(strtoupper($hostname), $deviceName) !== false) {
-                            error_log("Found potential alias match in Netshot map: " . $potentialMatch['name']);
-                            
-                            // Check for IP address in various possible field names
-                            $ipAddress = null;
-                            $possibleIpFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
-                            foreach ($possibleIpFields as $field) {
-                                if (isset($potentialMatch[$field]) && !empty($potentialMatch[$field])) {
-                                    $rawIpValue = $potentialMatch[$field];
-                                    
-                                    // Handle case where IP is an object with 'ip' field
-                                    if (is_array($rawIpValue) && isset($rawIpValue['ip'])) {
-                                        $ipAddress = $rawIpValue['ip'];
-                                        error_log("Found complex IP object in field '$field' for alias match, extracted IP: " . $ipAddress);
-                                    } else {
-                                        $ipAddress = $rawIpValue;
-                                        error_log("Found IP in field '$field' for alias match: " . $ipAddress);
-                                    }
-                                    break;
-                                }
-                            }
-                            
-                            if ($ipAddress) {
-                                error_log("Using IP from alias match for " . $hostname . ": " . $ipAddress);
-                                
-                                // Update the result in the results array
-                                foreach ($results as $key => $result) {
-                                    if (strtoupper($result['hostname']) === strtoupper($hostname)) {
-                                        $results[$key]['ip_address'] = $ipAddress;
-                                        // Store the uppercase hostname to ensure consistency
-                                        $results[$key]['hostname'] = strtoupper($hostname);
-                                        $results[$key]['netshot'] = [
-                                            'id' => $potentialMatch['id'] ?? null,
-                                            'name' => strtoupper($potentialMatch['name'] ?? ''),
-                                            'ip' => $ipAddress,
-                                            'model' => $potentialMatch['family'] ?? null,
-                                            'vendor' => $potentialMatch['domain'] ?? null,
-                                            'status' => $potentialMatch['status'] ?? null
-                                        ];
-                                        error_log("Updated hostname " . $hostname . " with IP from Netshot alias match: " . $ipAddress);
-                                        break;
-                                    }
-                                }
-                                $foundMatch = true;
-                                break;
-                            }
-                        }
-                    }
-                    
-                    if (!$foundMatch) {
-                        error_log("No matching device found in Netshot for: " . $hostname);
-                    }
+                    error_log("Added result for " . $hostname . " with IP: " . ($enrichedDevice['ip_address'] ?? 'empty'));
                 }
-                
-                // We no longer use generateIpFromHostname - Netshot is the only source of truth for IP addresses
-                if (empty($ipAddress)) {
-                    error_log("No IP found in Netshot for hostname: " . $hostname . " - leaving IP empty");
-                }
-                
-                // End of processing for this database result
-                $processedNetshot++;
-                if ($shouldLimitNetshot && $processedNetshot >= $maxNetshotLookups) {
-                    error_log("Reached Netshot processing limit ($maxNetshotLookups devices). Stopping further processing.");
-                    break;
-                }
-            } // End of foreach dbResults
-            
-            $endTime = microtime(true);
-            error_log("Processed Netshot data for " . count($dbResults) . " devices in " . 
-                      number_format(($endTime - $startTime), 2) . " seconds");
-            } // End of if !empty($dbResults)
+                    
+                $endTime = microtime(true);
+                error_log("Processed Netshot data for " . count($dbResults) . " devices in " . 
+                          number_format(($endTime - $startTime), 2) . " seconds");
+            } else {
+                // If no database results, create empty results array
+                error_log("No database results found for hostname search");
+            }
             break;
             
         case 'ip':

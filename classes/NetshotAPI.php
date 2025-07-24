@@ -626,6 +626,7 @@ class NetshotAPI {
      */
     public function enrichDeviceData($dbDevice) {
         if (!isset($dbDevice['hostname'])) {
+            error_log("enrichDeviceData: No hostname provided in device data");
             return $dbDevice;
         }
         
@@ -633,29 +634,70 @@ class NetshotAPI {
         $hostname = $dbDevice['hostname'];
         $originalHostname = $hostname;
         
+        error_log("enrichDeviceData: Starting enrichment for hostname: $originalHostname");
+        
         // Map ABR/DBR/CBR hostname to CCAP if applicable
         $hostname = $this->mapAbrToCcapHostname($hostname);
         if ($hostname !== $originalHostname) {
-            error_log("Enriching device data: Hostname mapped from ABR/DBR/CBR $originalHostname to CCAP $hostname");
+            error_log("enrichDeviceData: Hostname mapped from ABR/DBR/CBR $originalHostname to CCAP $hostname");
         }
         
         // Set validateFormat to false to maintain backward compatibility
         // This will still only search in INPRODUCTION devices
         $netshotDevice = $this->getDeviceByHostname($hostname, false);
         
+        error_log("enrichDeviceData: getDeviceByHostname result for '$hostname': " . 
+                  ($netshotDevice ? 'Found device' : 'Not found'));
+        
         // Handle both null (not found) and false (invalid format)
         if ($netshotDevice === null || $netshotDevice === false) {
-            return $dbDevice;
+            error_log("enrichDeviceData: Device not found in Netshot for hostname: $hostname");
+            
+            // Try fallback: search with original hostname if it was mapped
+            if ($hostname !== $originalHostname) {
+                error_log("enrichDeviceData: Trying fallback search with original hostname: $originalHostname");
+                $netshotDevice = $this->getDeviceByHostname($originalHostname, false);
+                
+                if ($netshotDevice) {
+                    error_log("enrichDeviceData: Found device with original hostname: $originalHostname");
+                } else {
+                    error_log("enrichDeviceData: Fallback search also failed for: $originalHostname");
+                }
+            }
+            
+            // If still not found, return original device without enrichment
+            if (!$netshotDevice) {
+                error_log("enrichDeviceData: No device found in Netshot, returning original device data");
+                return $dbDevice;
+            }
         }
         
         // Check for IP address in various possible field names
         $ipAddress = null;
         $possibleIpFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
+        
+        error_log("enrichDeviceData: Searching for IP address in Netshot device fields");
         foreach ($possibleIpFields as $field) {
             if (isset($netshotDevice[$field]) && !empty($netshotDevice[$field])) {
-                $ipAddress = $netshotDevice[$field];
+                $fieldValue = $netshotDevice[$field];
+                
+                // Handle case where IP is an object with 'ip' field
+                if (is_array($fieldValue) && isset($fieldValue['ip'])) {
+                    $ipAddress = $fieldValue['ip'];
+                    error_log("enrichDeviceData: Found IP in complex field '$field': $ipAddress");
+                } else {
+                    $ipAddress = $fieldValue;
+                    error_log("enrichDeviceData: Found IP in field '$field': $ipAddress");
+                }
                 break;
             }
+        }
+        
+        if (!$ipAddress) {
+            error_log("enrichDeviceData: No IP address found in any Netshot fields for hostname: $hostname");
+            // Log all available fields for debugging
+            $availableFields = array_keys($netshotDevice);
+            error_log("enrichDeviceData: Available Netshot fields: " . implode(', ', $availableFields));
         }
         
         // Add Netshot data to device record
@@ -667,6 +709,9 @@ class NetshotAPI {
         // Add IP address if found
         if ($ipAddress) {
             $dbDevice['ip_address'] = $ipAddress;
+            error_log("enrichDeviceData: Successfully enriched hostname '$originalHostname' with IP: $ipAddress");
+        } else {
+            error_log("enrichDeviceData: No IP address available for hostname: $originalHostname");
         }
         
         return $dbDevice;
