@@ -495,6 +495,15 @@ try {
                     // Replace the original device with the enriched version
                     $dbResults[$index] = $enrichedDevice;
                     
+                    // IMPORTANT: Update the corresponding entry in the results array with the enriched IP
+                    foreach ($results as $resultIndex => $result) {
+                        if (strtoupper($result['hostname']) === strtoupper($hostname)) {
+                            $results[$resultIndex]['ip_address'] = $enrichedDevice['ip_address'] ?? '';
+                            error_log("Updated results array for " . $hostname . " with IP: " . ($enrichedDevice['ip_address'] ?? 'empty'));
+                            break;
+                        }
+                    }
+                    
                     // For backwards compatibility, also maintain the old code path but use enriched data
                     $netshotDevice = $netshotDeviceMap[strtoupper($hostname)] ?? null;
                     $ipAddress = $enrichedDevice['ip_address'] ?? null;
