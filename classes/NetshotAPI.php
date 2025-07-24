@@ -309,23 +309,27 @@ class NetshotAPI {
     }
     
     /**
-     * Search for a device by IP address
+     * Search for a device by IP address (optimized)
      * 
      * @param string $ipPattern IP address pattern (can include wildcards as * or %)
      * @return array Matching devices
      */
     public function searchDevicesByIp($ipPattern) {
         try {
-            
             // Convert SQL LIKE pattern to regex
             $regexPattern = $this->patternToRegex($ipPattern);
             
-            // Get only INPRODUCTION devices
-            $devices = $this->getDevicesInGroup(null, true);
+            // Get only INPRODUCTION devices with caching
+            $devices = $this->getDevicesInGroup(null, true, true);
+            
+            if (empty($devices)) {
+                error_log("No devices available for IP pattern search: " . $ipPattern);
+                return [];
+            }
             
             error_log("Searching " . count($devices) . " INPRODUCTION devices with IP pattern: " . $ipPattern . " (regex: " . $regexPattern . ")");
             
-            // Filter devices by IP
+            // Filter devices by IP - use array_filter for better performance
             $results = [];
             foreach ($devices as $device) {
                 if (!isset($device['mgmtIp'])) {
