@@ -699,13 +699,28 @@ try {
             // Always convert hostname to uppercase for final response
             $uppercaseHostname = strtoupper($hostname);
             
+            // Check if there's an alias in the Netshot data
+            $alias = null;
+            if (isset($result['netshot']['Alias']) && !empty($result['netshot']['Alias'])) {
+                $alias = $result['netshot']['Alias'];
+                error_log("Found alias in Netshot data: " . $alias);
+            }
+            
             // Add the processed result with guaranteed uppercase hostname
-            $processedResults[] = [
+            $processedResult = [
                 'HostName' => $uppercaseHostname,
                 'IPAddress' => $ipAddress
             ];
             
-            error_log("FINAL RESULT: Hostname=" . $uppercaseHostname . ", IP=" . $ipAddress);
+            // Add alias if one exists
+            if ($alias && $alias !== $uppercaseHostname) {
+                $processedResult['Alias'] = $alias;
+                error_log("Added Alias to final result: " . $alias);
+            }
+            
+            $processedResults[] = $processedResult;
+            
+            error_log("FINAL RESULT: Hostname=" . $uppercaseHostname . ", IP=" . $ipAddress . ($alias ? ", Alias=" . $alias : ""));
         }
     } else {
         error_log("No search results found for: type=" . $searchType . ", query=" . $query);
