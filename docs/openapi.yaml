@@ -236,7 +236,7 @@ paths:
                     properties:
                       search:
                         type: string
-                        example: "/api/search?type={hostname|ip}&q={query}&api_key={key}"
+                        example: "/api/search?type={hostname|ip}&q={query}"
                       health:
                         type: string
                         example: "/api/health"
@@ -401,7 +401,7 @@ components:
             $ref: '#/components/schemas/Error'
           example:
             value:
-              error: "Invalid or missing API key"
+              error: "Invalid or missing authentication credentials"
               status: 401
     ServerError:
       description: Internal Server Error
