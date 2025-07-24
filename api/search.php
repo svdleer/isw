@@ -69,44 +69,23 @@ require_once __DIR__ . '/../classes/NetshotAPI.php';
  * @return string|null Generated IP address or null if no pattern matches
  */
 function generateIpFromHostname($hostname) {
+    // This function is deprecated. IP addresses should ONLY come from Netshot.
+    error_log("WARNING: generateIpFromHostname called but is deprecated. IP addresses should ONLY come from Netshot for: " . $hostname);
+    return null; // Always return null to ensure Netshot is used as the source of truth
+    
+    // The following code is kept commented out for reference but should never be used
+    /*
     // Example pattern: GV-RC0011-CCAP003
     if (preg_match('/([A-Z]{2})-([A-Z]{2})(\d{4})-CCAP(\d{3})/i', $hostname, $matches)) {
-        $locationCode = $matches[1]; // GV
-        $siteCode = $matches[2];     // RC
-        $siteNumber = $matches[3];   // 0011
-        $deviceNumber = $matches[4]; // 003
-        
-        // Location code to first octet mapping
-        $locationMap = [
-            'GV' => 172,
-            'HB' => 172,
-            'AM' => 172,
-            'RC' => 172,
-            // Add more as needed
-        ];
-        
-        // Site code to second octet mapping
-        $siteMap = [
-            'RC' => 16,
-            'GV' => 17,
-            'HB' => 18,
-            'AM' => 19,
-            // Add more as needed
-        ];
-        
-        $locationNum = $locationMap[strtoupper($locationCode)] ?? 172;
-        $siteNum = $siteMap[strtoupper($siteCode)] ?? 20;
-        $rack = intval(substr($siteNumber, -2)); // Last 2 digits of site number for third octet
-        $device = intval($deviceNumber);         // Device number for fourth octet
-        
-        return "{$locationNum}.{$siteNum}.{$rack}.{$device}";
+        // IP generation logic removed - use Netshot only
+        return null;
     }
     // Simpler pattern: just CCAP followed by numbers
     elseif (preg_match('/CCAP(\d+)/i', $hostname, $matches)) {
-        $num = intval($matches[1]);
-        return "172.16.0.{$num}";
+        // IP generation logic removed - use Netshot only
+        return null;
     }
-    // Default case: generate a deterministic but random-seeming IP based on the hostname hash
+    // Default case: IP generation logic removed - use Netshot only
     else {
         $hash = crc32($hostname);
         $thirdOctet = ($hash & 0xFF) % 254 + 1; // 1-254
@@ -441,9 +420,21 @@ try {
                 if ($netshotDevice) {
                     error_log("Found direct match in Netshot for ABR/DBR/CBR hostname: " . $originalQuery);
                     
-                    // Add to dbResults so it gets processed later
+                    // Add to dbResults so it gets processed later with IP address from Netshot
+                    // Check for IP address in various possible field names
+                    $ipAddress = null;
+                    $possibleIpFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
+                    foreach ($possibleIpFields as $field) {
+                        if (isset($netshotDevice[$field]) && !empty($netshotDevice[$field])) {
+                            $ipAddress = $netshotDevice[$field];
+                            error_log("Found IP in Netshot field '$field': " . $ipAddress);
+                            break;
+                        }
+                    }
+                    
                     $dbResults[] = [
-                        'hostname' => $netshotDevice['name'] ?? $originalQuery
+                        'hostname' => strtoupper($netshotDevice['name'] ?? $originalQuery),
+                        'ip_address' => $ipAddress
                     ];
                     
                     error_log("Added Netshot direct result to dbResults for: " . $originalQuery);
