@@ -515,18 +515,26 @@ try {
                 foreach ($dbResults as $index => $device) {
                     $hostname = $device['hostname'];
                     
-                    // Try to find a direct match in our Netshot device map
+                    // Use the proper enrichDeviceData method to get device data including IP address
+                    $enrichedDevice = $netshot->enrichDeviceData($device);
+                    
+                    // Log the enrichment result
+                    error_log("Enriched device data for " . $hostname . ": IP=" . ($enrichedDevice['ip_address'] ?? 'Not found'));
+                    
+                    // Replace the original device with the enriched version
+                    $dbResults[$index] = $enrichedDevice;
+                    
+                    // For backwards compatibility, also maintain the old code path but use enriched data
                     $netshotDevice = $netshotDeviceMap[strtoupper($hostname)] ?? null;
+                    $ipAddress = $enrichedDevice['ip_address'] ?? null;
                 
-                // Log if we found a direct match
-                error_log("Netshot match for " . $hostname . ": " . ($netshotDevice ? "Found" : "Not found"));
-                
-                // Check for IP address in various possible field names
-                $ipAddress = null;
-                if ($netshotDevice) {
-                    // Check all possible field names for IP address
-                    $possibleIpFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
-                    foreach ($possibleIpFields as $field) {
+                    error_log("Netshot match for " . $hostname . ": " . ($netshotDevice ? "Found" : "Not found") . ", IP: " . ($ipAddress ?: "Not found"));
+                    
+                    // Keep this part for backward compatibility, but we'll prefer the enriched data
+                    if (!$ipAddress && $netshotDevice) {
+                        // Check all possible field names for IP address
+                        $possibleIpFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
+                        foreach ($possibleIpFields as $field) {
                         if (isset($netshotDevice[$field]) && !empty($netshotDevice[$field])) {
                             $rawIpValue = $netshotDevice[$field];
                             
@@ -629,17 +637,9 @@ try {
                     }
                 }
                 
-                // FALLBACK: If we didn't find an IP in Netshot, try to generate one from the hostname
-                foreach ($results as $key => $result) {
-                    if (strtoupper($result['hostname']) === strtoupper($hostname) && empty($result['ip_address'])) {
-                        $ipAddress = generateIpFromHostname($hostname);
-                        if ($ipAddress) {
-                            $results[$key]['ip_address'] = $ipAddress;
-                            $results[$key]['_note'] = "IP address is algorithmically generated from hostname";
-                            error_log("Using generated IP for " . $hostname . ": " . $ipAddress);
-                        }
-                        break;
-                    }
+                // We no longer use generateIpFromHostname - Netshot is the only source of truth for IP addresses
+                if (empty($ipAddress)) {
+                    error_log("No IP found in Netshot for hostname: " . $hostname . " - leaving IP empty");
                 }
                 
                 // End of processing for this database result
@@ -738,7 +738,9 @@ try {
                                 
                                 if (!empty($dbResults)) {
                                     foreach ($dbResults as $dbDevice) {
-                                        $dbDevice['ip_address'] = $searchQuery; // Add the IP we searched for
+                                        // Get the IP from Netshot, not just using the search query
+                                        // We'll look up the hostname in Netshot later in the code
+                                        $dbDevice['ip_address'] = ''; // Start with empty IP, Netshot will populate it
                                         $results[] = $dbDevice;
                                     }
                                 }
@@ -753,8 +755,8 @@ try {
                 // For wildcard searches, use our already retrieved Netshot devices
                 error_log("Performing wildcard IP lookup for: " . $searchQuery);
                 
-                // Not using database loopbackip field as it's not useful
-                error_log("Skipping database loopbackip wildcard lookup as it's not useful. Relying only on Netshot.");
+                // Using only Netshot as source of truth for IP addresses
+                error_log("Using only Netshot as source of truth for IP addresses - not using database or generated IPs.");
                 
                 // Attempt to search hostnames in the database that might match this IP pattern
                 try {
