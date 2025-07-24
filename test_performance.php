@@ -150,8 +150,35 @@ echo "\n=== Testing IP Address Search ===\n";
 // Test IP address queries to see if they work
 echo "Testing IP address search functionality...\n";
 
+// Test the specific IP that was failing - should now work with nested mgmtAddress structure
+echo "\n--- Testing the previously failing IP: 172.30.198.15 ---\n";
+$failingIp = '172.30.198.15';
+
+$start = microtime(true);
+$specificResult = $netshot->getDeviceByIP($failingIp);
+$specificTime = microtime(true) - $start;
+
+echo "IP lookup time: " . round($specificTime, 3) . " seconds\n";
+
+if ($specificResult) {
+    echo "✅ Found device: " . ($specificResult['name'] ?? 'Unknown') . "\n";
+    echo "✅ IP result: " . ($specificResult['ip'] ?? 'Not set') . "\n";
+    echo "✅ Device ID: " . ($specificResult['id'] ?? 'Not set') . "\n";
+    
+    // Check if ABR/DBR/CBR alias replacement worked
+    $hostname = $specificResult['name'] ?? '';
+    if (preg_match('/(ABR|DBR|CBR)/i', $hostname)) {
+        echo "  - Note: Still showing CCAP hostname (no alias found or lookup failed)\n";
+    } else {
+        echo "  - ✅ Hostname appears to be user-friendly alias\n";
+    }
+} else {
+    echo "❌ Still no device found for IP: $failingIp\n";
+    echo "   This indicates the nested mgmtAddress fix may need more work\n";
+}
+
 // Get some real IP addresses from the memory system first
-echo "Getting some real IP addresses to test with...\n";
+echo "\nGetting some real IP addresses to test with...\n";
 try {
     // Get a few hostnames with IPs from memory
     $testIps = [];

@@ -548,9 +548,23 @@ class NetshotAPI {
                 }
                 
                 if (preg_match($regexPattern, $device['mgmtIp'])) {
+                    $originalHostname = $device['name'] ?? '';
+                    $displayHostname = strtoupper($originalHostname);
+                    
+                    // Check if this device hostname contains ABR/DBR/CBR patterns
+                    // If so, look up the alias to show the user-friendly name instead
+                    if (preg_match('/(ABR|DBR|CBR)/i', $originalHostname)) {
+                        error_log("Found ABR/DBR/CBR device in IP wildcard search: $originalHostname - looking up alias");
+                        $aliasHostname = $this->findAliasForCcapHostname($originalHostname);
+                        if ($aliasHostname !== strtoupper($originalHostname)) {
+                            $displayHostname = $aliasHostname;
+                            error_log("Using alias hostname $aliasHostname instead of CCAP hostname $originalHostname for IP wildcard result");
+                        }
+                    }
+                    
                     $results[] = [
                         'id' => $device['id'] ?? null,
-                        'name' => strtoupper($device['name'] ?? ''),
+                        'name' => $displayHostname,
                         'ip' => $device['mgmtIp'] ?? '',
                         'model' => $device['family'] ?? null,
                         'vendor' => $device['domain'] ?? null,
@@ -746,6 +760,43 @@ class NetshotAPI {
         }
     }
     
+    /**
+     * Helper method to find alias hostname for a CCAP hostname (reverse of mapAbrToCcapHostname)
+     * Used when IP search returns a CCAP device but we want to show the user-friendly alias
+     * 
+     * @param string $ccapHostname The CCAP hostname to find an alias for
+     * @return string The alias hostname if found, otherwise the original hostname
+     */
+    public function findAliasForCcapHostname($ccapHostname) {
+        try {
+            // Try to load the Database class
+            if (!class_exists('Database')) {
+                require_once __DIR__ . '/Database.php';
+            }
+            
+            // Create database connection
+            $db = new Database();
+            
+            // Query for aliases that map to this CCAP name
+            $escapedHostname = str_replace("'", "''", strtoupper($ccapHostname)); // Simple SQL escape
+            $sql = "SELECT UPPER(alias) as alias FROM reporting.acc_alias WHERE UPPER(ccap_name) = UPPER('$escapedHostname')";
+            error_log("Looking up alias for CCAP hostname: $ccapHostname - Query: $sql");
+            
+            $result = $db->query($sql);
+            if (!empty($result) && isset($result[0]['alias'])) {
+                $aliasHostname = strtoupper($result[0]['alias']);
+                error_log("Found alias hostname: $aliasHostname for CCAP device: $ccapHostname");
+                return $aliasHostname;
+            } else {
+                error_log("No alias found for CCAP device: $ccapHostname");
+                return strtoupper($ccapHostname); // Return original in uppercase if no alias found
+            }
+        } catch (Exception $dbException) {
+            error_log("Database error looking up alias for CCAP: " . $dbException->getMessage());
+            return strtoupper($ccapHostname); // Return original in uppercase on error
+        }
+    }
+
     public function getDeviceByIP($ipAddress) {
         try {
             error_log("Fetching device from Netshot for IP lookup: " . $ipAddress);
@@ -767,10 +818,24 @@ class NetshotAPI {
             if (isset($deviceIndex['byIp'][$ipAddress])) {
                 $device = $deviceIndex['byIp'][$ipAddress];
                 
+                $originalHostname = $device['name'] ?? '';
+                $displayHostname = strtoupper($originalHostname);
+                
+                // Check if this device hostname contains ABR/DBR/CBR patterns
+                // If so, look up the alias to show the user-friendly name instead
+                if (preg_match('/(ABR|DBR|CBR)/i', $originalHostname)) {
+                    error_log("Found ABR/DBR/CBR device for IP $ipAddress: $originalHostname - looking up alias");
+                    $aliasHostname = $this->findAliasForCcapHostname($originalHostname);
+                    if ($aliasHostname !== strtoupper($originalHostname)) {
+                        $displayHostname = $aliasHostname;
+                        error_log("Using alias hostname $aliasHostname instead of CCAP hostname $originalHostname for IP search result");
+                    }
+                }
+                
                 // Format the response consistently and ensure hostname is uppercase
                 $result = [
                     'id' => $device['id'] ?? null,
-                    'name' => strtoupper($device['name'] ?? ''),
+                    'name' => $displayHostname,
                     'ip' => $device['mgmtIp'] ?? $ipAddress,
                     'model' => $device['family'] ?? null,
                     'vendor' => $device['domain'] ?? null,
