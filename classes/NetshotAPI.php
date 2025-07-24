@@ -540,14 +540,36 @@ class NetshotAPI {
             
             error_log("Searching " . count($devices) . " INPRODUCTION devices with IP pattern: " . $ipPattern . " (regex: " . $regexPattern . ")");
             
+            // Debug: Log a sample of IP addresses to help troubleshoot
+            $sampleIPs = [];
+            $count = 0;
+            foreach ($devices as $device) {
+                if (isset($device['mgmtIp']) && !empty($device['mgmtIp']) && $count < 10) {
+                    $sampleIPs[] = $device['mgmtIp'];
+                    $count++;
+                }
+            }
+            error_log("Sample IP addresses found in devices: " . implode(', ', $sampleIPs));
+            
             // Filter devices by IP - use array_filter for better performance
             $results = [];
+            $matchedCount = 0;
+            $checkedCount = 0;
             foreach ($devices as $device) {
                 if (!isset($device['mgmtIp'])) {
                     continue;
                 }
                 
-                if (preg_match($regexPattern, $device['mgmtIp'])) {
+                $checkedCount++;
+                $deviceIp = $device['mgmtIp'];
+                
+                // Debug: Log first few IP checks
+                if ($checkedCount <= 5) {
+                    $matches = preg_match($regexPattern, $deviceIp);
+                    error_log("IP check #$checkedCount: '$deviceIp' matches regex '$regexPattern': " . ($matches ? 'YES' : 'NO'));
+                }
+                
+                if (preg_match($regexPattern, $deviceIp)) {
                     $originalHostname = $device['name'] ?? '';
                     $displayHostname = strtoupper($originalHostname);
                     $aliasHostname = null;
@@ -591,7 +613,7 @@ class NetshotAPI {
                 }
             }
             
-            error_log("Found " . count($results) . " matching devices for IP pattern: " . $ipPattern);
+            error_log("Found " . count($results) . " matching devices for IP pattern: " . $ipPattern . " (checked $checkedCount devices with mgmtIp)");
             return $results;
         } catch (Exception $e) {
             error_log("Error in searchDevicesByIp: " . $e->getMessage());
