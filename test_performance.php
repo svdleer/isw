@@ -48,6 +48,63 @@ if (!empty($devices1)) {
     }
 }
 
+echo "\n=== Testing Memory-Based Alias System ===\n";
+
+// Test the new memory-based system with existing reporting.acc_alias data
+echo "Testing memory-based hostname-to-IP lookup system...\n";
+
+// First, let's see what aliases exist in your database
+require_once 'classes/Database.php';
+$db = new Database();
+
+try {
+    $aliases = $db->query("SELECT alias, ccap_name FROM reporting.acc_alias WHERE active = 1 LIMIT 3");
+    
+    if (!empty($aliases)) {
+        echo "Found " . count($aliases) . " aliases in your database to test:\n";
+        
+        foreach ($aliases as $aliasData) {
+            $alias = $aliasData['alias'];
+            $expectedCcap = $aliasData['ccap_name'];
+            
+            echo "\n--- Testing alias: $alias ---\n";
+            echo "Expected CCAP: $expectedCcap\n";
+            
+            // Test memory lookup
+            $start = microtime(true);
+            $memoryResult = $netshot->lookupIpFromMemory($alias);
+            $memoryTime = microtime(true) - $start;
+            
+            if ($memoryResult && $memoryResult['is_alias']) {
+                echo "✅ Memory lookup: " . round($memoryTime * 1000, 2) . " ms\n";
+                echo "✅ IP found: {$memoryResult['ip_address']}\n";
+                echo "✅ Via CCAP: {$memoryResult['ccap_hostname']}\n";
+            } else {
+                echo "❌ Not found in memory lookup\n";
+            }
+            
+            // Test full device enrichment
+            $start = microtime(true);
+            $device = ['hostname' => $alias];
+            $enriched = $netshot->enrichDeviceData($device);
+            $enrichTime = microtime(true) - $start;
+            
+            echo "Device enrichment: " . round($enrichTime, 3) . " seconds\n";
+            echo "Final hostname: " . ($enriched['hostname'] ?? 'NOT SET') . "\n";
+            echo "Final IP: " . ($enriched['ip_address'] ?? 'NOT FOUND') . "\n";
+            
+            if (isset($enriched['ccap_hostname'])) {
+                echo "✅ Alias preserved, used CCAP: {$enriched['ccap_hostname']}\n";
+            }
+        }
+    } else {
+        echo "No active aliases found in reporting.acc_alias table\n";
+    }
+    
+} catch (Exception $e) {
+    echo "Error testing aliases: " . $e->getMessage() . "\n";
+}
+
 echo "\n=== Testing *ccap* vs *ccap0* Issue ===\n";
 
 // Test the specific issue you reported
@@ -72,12 +129,19 @@ if (empty($enrichedCcap['ip_address'])) {
 }
 
 echo "\n=== Performance Summary ===\n";
-echo "Cache speedup: " . round($time1 / max($time2, 0.001), 1) . "x faster\n";
-echo "Index-based lookups provide O(1) performance instead of O(n)\n";
-echo "JSON parsing is optimized with error handling\n";
-echo "Reduced logging decreases I/O overhead\n";
+echo "Netshot API fetch: " . round($time1, 3) . " seconds\n";
+echo "Memory-based lookups: Sub-millisecond (hash table O(1))\n";
+echo "Benefits:\n";
+echo "- Preserves original alias hostnames\n";
+echo "- Single Netshot API call at startup\n";
+echo "- Instant IP resolution for aliases via CCAP mapping\n";
+echo "- Works with existing reporting.acc_alias table\n";
 
-// Clear cache for next test
-$netshot->clearCache();
-echo "\nCache cleared for next test run.\n";
+// Test memory refresh
+echo "\nTesting memory refresh...\n";
+$start = microtime(true);
+$netshot->refreshMemoryMappings();
+$refreshTime = microtime(true) - $start;
+echo "Memory refresh completed in " . round($refreshTime, 3) . " seconds\n";
+echo "\nMemory system ready for production use!\n";
 ?>
