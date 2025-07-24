@@ -552,12 +552,14 @@ class NetshotAPI {
                     $displayHostname = strtoupper($originalHostname);
                     
                     // Check if this device hostname contains ABR/DBR/CBR patterns
-                    // If so, it might be stored as an alias in Netshot, so use it directly
+                    // If so, look up the alias to show the user-friendly name instead
                     if (preg_match('/(ABR|DBR|CBR)/i', $originalHostname)) {
-                        error_log("Found ABR/DBR/CBR device in IP wildcard search: $originalHostname - using as alias directly");
-                        $displayHostname = strtoupper($originalHostname);
-                    } else {
-                        $displayHostname = strtoupper($originalHostname);
+                        error_log("Found ABR/DBR/CBR device in IP wildcard search: $originalHostname - looking up alias");
+                        $aliasHostname = $this->findAliasForCcapHostname($originalHostname);
+                        if ($aliasHostname !== strtoupper($originalHostname)) {
+                            $displayHostname = $aliasHostname;
+                            error_log("Using alias hostname $aliasHostname instead of CCAP hostname $originalHostname for IP wildcard result");
+                        }
                     }
                     
                     $results[] = [
@@ -776,20 +778,33 @@ class NetshotAPI {
             // Create database connection
             $db = new Database();
             
-            // Query for aliases that map to this CCAP name
+            // Use flexible query to find CCAP hostname regardless of input type
             $escapedHostname = str_replace("'", "''", $ccapHostname); // Simple SQL escape
-            $sql = "SELECT UPPER(alias) as alias FROM reporting.acc_alias WHERE UPPER(ccap_name) = UPPER('$escapedHostname')";
-            error_log("Looking up alias for CCAP hostname: $ccapHostname - Query: $sql");
+            $sql = "SELECT UPPER(ccap_name) as hostname FROM reporting.acc_alias WHERE UPPER(ccap_name) = UPPER('$escapedHostname') OR UPPER(alias) = UPPER('$escapedHostname')";
+            error_log("Looking up CCAP hostname for: $ccapHostname - Query: $sql");
             
             $result = $db->query($sql);
-            if (!empty($result) && isset($result[0]['alias'])) {
-                $aliasHostname = $result[0]['alias']; // Already uppercase from query
-                error_log("Found alias hostname: $aliasHostname for CCAP device: $ccapHostname");
-                return $aliasHostname;
-            } else {
-                error_log("No alias found for CCAP device: $ccapHostname");
-                return strtoupper($ccapHostname); // Return original in uppercase if no alias found
+            if (!empty($result) && isset($result[0]['hostname'])) {
+                $ccapName = $result[0]['hostname']; // Already uppercase from query
+                
+                // Now find the alias for this CCAP name
+                $sql2 = "SELECT UPPER(alias) as alias FROM reporting.acc_alias WHERE UPPER(ccap_name) = UPPER('$ccapName')";
+                error_log("Looking up alias for CCAP hostname: $ccapName - Query: $sql2");
+                
+                $result2 = $db->query($sql2);
+                if (!empty($result2) && isset($result2[0]['alias'])) {
+                    $aliasHostname = $result2[0]['alias']; // Already uppercase from query
+                    error_log("Found alias hostname: $aliasHostname for CCAP device: $ccapName");
+                    return $aliasHostname;
+                } else {
+                    error_log("No alias found for CCAP device: $ccapName - returning CCAP name");
+                    return $ccapName;
+                }
             }
+            
+            error_log("No CCAP mapping found for: $ccapHostname");
+            return strtoupper($ccapHostname); // Return original in uppercase if no mapping found
+            
         } catch (Exception $dbException) {
             error_log("Database error looking up alias for CCAP: " . $dbException->getMessage());
             return strtoupper($ccapHostname); // Return original in uppercase on error
@@ -821,12 +836,14 @@ class NetshotAPI {
                 $displayHostname = strtoupper($originalHostname);
                 
                 // Check if this device hostname contains ABR/DBR/CBR patterns
-                // If so, it might be stored as an alias in Netshot, so use it directly
+                // If so, look up the alias to show the user-friendly name instead
                 if (preg_match('/(ABR|DBR|CBR)/i', $originalHostname)) {
-                    error_log("Found ABR/DBR/CBR device for IP $ipAddress: $originalHostname - using as alias directly");
-                    $displayHostname = strtoupper($originalHostname);
-                } else {
-                    $displayHostname = strtoupper($originalHostname);
+                    error_log("Found ABR/DBR/CBR device for IP $ipAddress: $originalHostname - looking up alias");
+                    $aliasHostname = $this->findAliasForCcapHostname($originalHostname);
+                    if ($aliasHostname !== strtoupper($originalHostname)) {
+                        $displayHostname = $aliasHostname;
+                        error_log("Using alias hostname $aliasHostname instead of CCAP hostname $originalHostname for IP search result");
+                    }
                 }
                 
                 // Format the response consistently and ensure hostname is uppercase
