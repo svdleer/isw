@@ -304,7 +304,7 @@ try {
                 if (strpos($searchQuery, '%') !== false) {
                     // For queries that already have wildcards, insert CCAP in the middle
                     // instead of prepending it to avoid the wrong positioning
-                    $searchQuery = str_replace('%', '%CCAP%', $searchQuery, 1);
+                    $searchQuery = str_replace('%', '%CCAP%', $searchQuery);
                     error_log("Added CCAP to wildcard query: " . $searchQuery);
                 } else {
                     // If no wildcards, ensure we're searching for CCAP as part of the hostname
