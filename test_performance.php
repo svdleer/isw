@@ -145,6 +145,85 @@ foreach ($wildcardTests as $wildcard) {
     }
 }
 
+echo "\n=== Testing IP Address Search ===\n";
+
+// Test IP address queries to see if they work
+echo "Testing IP address search functionality...\n";
+
+// Get some real IP addresses from the memory system first
+echo "Getting some real IP addresses to test with...\n";
+try {
+    // Get a few hostnames with IPs from memory
+    $testIps = [];
+    $aliases = $db->query("SELECT alias, ccap_name FROM reporting.acc_alias LIMIT 2");
+    
+    foreach ($aliases as $aliasData) {
+        $alias = $aliasData['alias'];
+        $memoryResult = $netshot->lookupIpFromMemory($alias);
+        
+        if ($memoryResult && isset($memoryResult['ip_address'])) {
+            $testIps[] = [
+                'ip' => $memoryResult['ip_address'],
+                'expected_hostname' => $memoryResult['is_alias'] ? $alias : $memoryResult['hostname']
+            ];
+        }
+    }
+    
+    // Test exact IP lookups
+    foreach ($testIps as $testData) {
+        $testIp = $testData['ip'];
+        $expectedHostname = $testData['expected_hostname'];
+        
+        echo "\n--- Testing exact IP: $testIp ---\n";
+        echo "Expected hostname: $expectedHostname\n";
+        
+        $start = microtime(true);
+        $ipDevice = $netshot->getDeviceByIP($testIp);
+        $ipTime = microtime(true) - $start;
+        
+        echo "IP lookup time: " . round($ipTime, 3) . " seconds\n";
+        
+        if ($ipDevice) {
+            echo "✅ Found device: " . ($ipDevice['name'] ?? 'Unknown') . "\n";
+            echo "✅ IP result: " . ($ipDevice['ip'] ?? 'Not set') . "\n";
+        } else {
+            echo "❌ No device found for IP: $testIp\n";
+        }
+    }
+    
+    // Test IP wildcard searches
+    echo "\n--- Testing IP wildcard searches ---\n";
+    
+    $ipWildcardTests = ['192.168.1.*', '10.0.*', '172.16.*'];
+    
+    foreach ($ipWildcardTests as $ipPattern) {
+        echo "\nTesting IP wildcard: $ipPattern\n";
+        
+        $start = microtime(true);
+        $wildcardResults = $netshot->searchDevicesByIp($ipPattern);
+        $wildcardTime = microtime(true) - $start;
+        
+        echo "Search time: " . round($wildcardTime, 3) . " seconds\n";
+        echo "Found " . count($wildcardResults) . " matches\n";
+        
+        if (!empty($wildcardResults)) {
+            $sampleCount = min(3, count($wildcardResults));
+            echo "Sample matches:\n";
+            for ($i = 0; $i < $sampleCount; $i++) {
+                $match = $wildcardResults[$i];
+                echo "  - " . ($match['name'] ?? 'Unknown') . ": " . ($match['ip'] ?? 'No IP') . "\n";
+            }
+            
+            if (count($wildcardResults) > 3) {
+                echo "  ... and " . (count($wildcardResults) - 3) . " more\n";
+            }
+        }
+    }
+    
+} catch (Exception $e) {
+    echo "Error testing IP searches: " . $e->getMessage() . "\n";
+}
+
 echo "\n=== Testing *ccap* vs *ccap0* Issue ===\n";
 
 // Test the specific issue you reported
