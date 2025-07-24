@@ -140,9 +140,32 @@ class NetshotAPI {
                 $index['byHostname'][$hostname] = $device;
             }
             
-            // Index by IP address
-            if (isset($device['mgmtIp']) && !empty($device['mgmtIp'])) {
-                $index['byIp'][$device['mgmtIp']] = $device;
+            // Index by IP address - handle nested mgmtAddress structure
+            $deviceIp = null;
+            
+            // Check multiple possible IP field structures
+            $possibleIpFields = ['mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
+            
+            // First, try simple fields
+            foreach ($possibleIpFields as $field) {
+                if (isset($device[$field]) && !empty($device[$field])) {
+                    $deviceIp = $device[$field];
+                    break;
+                }
+            }
+            
+            // If not found, check nested mgmtAddress structure
+            if (!$deviceIp && isset($device['mgmtAddress'])) {
+                if (is_array($device['mgmtAddress']) && isset($device['mgmtAddress']['ip'])) {
+                    $deviceIp = $device['mgmtAddress']['ip'];
+                }
+            }
+            
+            // Add to IP index if we found an IP
+            if ($deviceIp && !empty($deviceIp)) {
+                // Store the flattened IP in the device for consistent access
+                $device['mgmtIp'] = $deviceIp;
+                $index['byIp'][$deviceIp] = $device;
             }
         }
         
