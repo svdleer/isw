@@ -9,9 +9,6 @@ class NetshotAPI {
     private $apiUrl;
     private $apiKey;
     private $group;
-    private $devicesCache = null;
-    private $cacheTimestamp = null;
-    private $cacheLifetime = 300; // 5 minutes cache
     
     /**
      * Constructor
@@ -123,27 +120,6 @@ class NetshotAPI {
      * @return array Devices in the specified group
      */
     /**
-     * Check if cached data is still valid
-     * 
-     * @return bool True if cache is valid, false otherwise
-     */
-    private function isCacheValid() {
-        return $this->devicesCache !== null && 
-               $this->cacheTimestamp !== null && 
-               (time() - $this->cacheTimestamp) < $this->cacheLifetime;
-    }
-    
-    /**
-     * Clear the device cache
-     * 
-     * @return void
-     */
-    private function clearDeviceCache() {
-        $this->devicesCache = null;
-        $this->cacheTimestamp = null;
-    }
-    
-    /**
      * Build an index of devices by hostname and IP for faster lookups
      * 
      * @param array $devices Array of devices to index
@@ -184,20 +160,14 @@ class NetshotAPI {
     }
     
     /**
-     * Get devices from a specific group with caching
+     * Get devices from a specific group (simplified - no caching)
      * 
      * @param int|string|null $groupParam Optional override for the group ID/name to fetch devices from
      * @param bool $onlyInProduction Whether to filter for only INPRODUCTION devices (default: true)
-     * @param bool $useCache Whether to use cached results (default: true)
+     * @param bool $useCache Ignored - no caching for simplicity
      * @return array Devices in the specified group
      */
-    public function getDevicesInGroup($groupParam = null, $onlyInProduction = true, $useCache = true) {
-        // Check cache first if enabled
-        if ($useCache && $this->isCacheValid()) {
-            error_log("Using cached device data (" . count($this->devicesCache) . " devices)");
-            return $onlyInProduction ? $this->filterInProductionDevices($this->devicesCache) : $this->devicesCache;
-        }
-        
+    public function getDevicesInGroup($groupParam = null, $onlyInProduction = true, $useCache = false) {
         // Use parameter if provided, otherwise use the class property
         $group = $groupParam !== null ? $groupParam : $this->group;
         $groupQueryParam = '';
@@ -281,10 +251,6 @@ class NetshotAPI {
             $result = $result ?: [];
             error_log("Retrieved " . count($result) . " raw devices from Netshot using {$groupQueryParam}");
             
-            // Cache the raw results
-            $this->devicesCache = $result;
-            $this->cacheTimestamp = time();
-            
             // Filter for INPRODUCTION devices if requested
             if ($onlyInProduction) {
                 $result = $this->filterInProductionDevices($result);
@@ -298,14 +264,14 @@ class NetshotAPI {
     }
     
     /**
-     * Clear cache - public method for manual cache clearing
+     * Clear cache - no-op since we removed caching
      * 
      * @param string|null $key The cache key (ignored for backward compatibility)
      * @return void
      */
     public function clearCache($key = null) {
-        $this->clearDeviceCache();
-        error_log("NetshotAPI cache cleared manually");
+        // No caching anymore - method kept for backward compatibility
+        error_log("NetshotAPI clearCache called - no caching in use");
     }
     
     /**
@@ -319,8 +285,8 @@ class NetshotAPI {
             // Convert SQL LIKE pattern to regex
             $regexPattern = $this->patternToRegex($ipPattern);
             
-            // Get only INPRODUCTION devices with caching
-            $devices = $this->getDevicesInGroup(null, true, true);
+            // Get only INPRODUCTION devices - no caching
+            $devices = $this->getDevicesInGroup(null, true, false);
             
             if (empty($devices)) {
                 error_log("No devices available for IP pattern search: " . $ipPattern);
@@ -388,8 +354,8 @@ class NetshotAPI {
                 }
             }
             
-            // Get only INPRODUCTION devices with caching
-            $devices = $this->getDevicesInGroup(null, true, true);
+            // Get only INPRODUCTION devices - no caching
+            $devices = $this->getDevicesInGroup(null, true, false);
             
             if (empty($devices)) {
                 error_log("No devices available for hostname search: " . $hostname);
@@ -539,8 +505,8 @@ class NetshotAPI {
         try {
             error_log("Fetching device from Netshot for IP lookup: " . $ipAddress);
             
-            // Get only INPRODUCTION devices with caching
-            $devices = $this->getDevicesInGroup(null, true, true);
+            // Get only INPRODUCTION devices - no caching
+            $devices = $this->getDevicesInGroup(null, true, false);
             
             if (empty($devices)) {
                 error_log("No devices available for IP search: " . $ipAddress);
@@ -590,8 +556,8 @@ class NetshotAPI {
         try {
             error_log("Looking up hostnames for IP: " . $ipAddress);
             
-            // Get only INPRODUCTION devices with caching
-            $devices = $this->getDevicesInGroup(null, true, true);
+            // Get only INPRODUCTION devices - no caching
+            $devices = $this->getDevicesInGroup(null, true, false);
             
             if (empty($devices)) {
                 return [];

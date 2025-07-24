@@ -426,25 +426,12 @@ try {
             // Process each device and ensure we get IP addresses from Netshot
             $results = [];
             
-            // For *CCAP* queries that might return many results, limit Netshot processing to improve performance
-            $shouldLimitNetshot = ($isAllCcapSearch && count($dbResults) > 50);
-            $maxNetshotLookups = 50; // Limit how many devices we'll look up in Netshot for large result sets
-            
             error_log("Processing " . count($dbResults) . " devices from database results - will get IP addresses from Netshot");
-            
-            // Skip Netshot processing for huge result sets
-            if ($shouldLimitNetshot) {
-                error_log("Large result set detected (" . count($dbResults) . " devices). Limiting Netshot processing to $maxNetshotLookups devices.");
-                
-                // Process only the most important/critical devices with Netshot data
-                // For example: the first $maxNetshotLookups devices
-                $dbResults = array_slice($dbResults, 0, $maxNetshotLookups);
-            }
             
             // Initialize results array - will be populated with enrichment data
             $results = [];
             
-            // Only if we need Netshot data, make the API call
+            // Process all devices - no artificial limits
             if (!empty($dbResults)) {
                 // OPTIMIZATION: Get all Netshot devices in a single API call
                 error_log("Getting all devices from Netshot in a single API call");
@@ -467,16 +454,13 @@ try {
                 error_log("Created Netshot device map with " . count($netshotDeviceMap) . " entries in " . 
                           number_format(($endTime - $startTime), 2) . " seconds");
                 
-                // Now process devices to add Netshot data and populate results array
+                // Now process ALL devices to add Netshot data and populate results array
                 $startTime = microtime(true);
                 foreach ($dbResults as $index => $device) {
                     $hostname = strtoupper($device['hostname']);
                     
-                    // Use the proper enrichDeviceData method to get device data including IP address
+                    // Use the enrichDeviceData method to get device data including IP address
                     $enrichedDevice = $netshot->enrichDeviceData($device);
-                    
-                    // Log the enrichment result
-                    error_log("Enriched device data for " . $hostname . ": IP=" . ($enrichedDevice['ip_address'] ?? 'Not found'));
                     
                     // Add enriched device directly to results array
                     $results[] = [
@@ -484,7 +468,10 @@ try {
                         'ip_address' => $enrichedDevice['ip_address'] ?? ''
                     ];
                     
-                    error_log("Added result for " . $hostname . " with IP: " . ($enrichedDevice['ip_address'] ?? 'empty'));
+                    // Log every 50 devices to show progress for large result sets
+                    if (($index + 1) % 50 === 0) {
+                        error_log("Processed " . ($index + 1) . " of " . count($dbResults) . " devices");
+                    }
                 }
                     
                 $endTime = microtime(true);

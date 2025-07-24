@@ -48,6 +48,29 @@ if (!empty($devices1)) {
     }
 }
 
+echo "\n=== Testing *ccap* vs *ccap0* Issue ===\n";
+
+// Test the specific issue you reported
+echo "Testing the *ccap* vs *ccap0* issue...\n";
+
+// Simulate a hostname search result for testing
+$testCcapDevice = ['hostname' => 'TEST-LC0001-CCAP001'];
+$testCcap0Device = ['hostname' => 'TEST-LC0001-CCAP001']; // Same device for comparison
+
+echo "\nTesting enrichment for CCAP device:\n";
+$start = microtime(true);
+$enrichedCcap = $netshot->enrichDeviceData($testCcapDevice);
+$timeCcap = microtime(true) - $start;
+
+echo "CCAP enrichment time: " . round($timeCcap, 3) . " seconds\n";
+echo "CCAP IP result: " . ($enrichedCcap['ip_address'] ?? 'EMPTY') . "\n";
+
+if (empty($enrichedCcap['ip_address'])) {
+    echo "❌ IP address is empty - this indicates the issue is still present\n";
+} else {
+    echo "✅ IP address populated correctly\n";
+}
+
 echo "\n=== Performance Summary ===\n";
 echo "Cache speedup: " . round($time1 / max($time2, 0.001), 1) . "x faster\n";
 echo "Index-based lookups provide O(1) performance instead of O(n)\n";
