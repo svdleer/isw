@@ -10,6 +10,11 @@ class NetshotAPI {
     private $apiKey;
     private $group;
     
+    // Memory storage for hostname-to-IP mappings
+    private $hostnameIpMap = [];
+    private $aliasIpMap = [];
+    private $mapInitialized = false;
+    
     /**
      * Constructor
      * 
@@ -264,14 +269,149 @@ class NetshotAPI {
     }
     
     /**
-     * Clear cache - no-op since we removed caching
+     * Clear cache - clears memory mappings for fresh data
      * 
      * @param string|null $key The cache key (ignored for backward compatibility)
      * @return void
      */
     public function clearCache($key = null) {
-        // No caching anymore - method kept for backward compatibility
-        error_log("NetshotAPI clearCache called - no caching in use");
+        // Clear memory mappings
+        $this->hostnameIpMap = [];
+        $this->aliasIpMap = [];
+        $this->mapInitialized = false;
+        
+        error_log("NetshotAPI clearCache called - memory mappings cleared");
+    }
+    
+    /**
+     * Force refresh of memory mappings from Netshot and MySQL
+     * Useful when you know the data has changed and want to reload
+     */
+    public function refreshMemoryMappings() {
+        error_log("NetshotAPI: Forcing refresh of memory mappings");
+        $this->clearCache();
+        $this->initializeMemoryMappings();
+        error_log("NetshotAPI: Memory mappings refreshed - " . 
+                  count($this->hostnameIpMap) . " hostnames, " . 
+                  count($this->aliasIpMap) . " aliases");
+    }
+    
+    /**
+     * Initialize memory mappings by reading all hostnames from Netshot and alias mappings from MySQL
+     * This creates an in-memory lookup table for fast hostname-to-IP resolution
+     */
+    private function initializeMemoryMappings() {
+        if ($this->mapInitialized) {
+            return; // Already initialized
+        }
+        
+        error_log("NetshotAPI: Initializing memory mappings from Netshot and MySQL alias table");
+        $startTime = microtime(true);
+        
+        // Step 1: Get all devices from Netshot with their hostnames and IP addresses
+        try {
+            $netshotDevices = $this->getDevicesInGroup(null, true, false);
+            error_log("NetshotAPI: Retrieved " . count($netshotDevices) . " devices from Netshot");
+            
+            // Build hostname-to-IP mapping from Netshot data
+            foreach ($netshotDevices as $device) {
+                $hostname = strtoupper($device['name'] ?? '');
+                $ipAddress = null;
+                
+                // Extract IP address from various possible fields
+                $possibleIpFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
+                foreach ($possibleIpFields as $field) {
+                    if (isset($device[$field]) && !empty($device[$field])) {
+                        $fieldValue = $device[$field];
+                        
+                        // Handle case where IP is an object with 'ip' field
+                        if (is_array($fieldValue) && isset($fieldValue['ip'])) {
+                            $ipAddress = $fieldValue['ip'];
+                        } else {
+                            $ipAddress = $fieldValue;
+                        }
+                        break;
+                    }
+                }
+                
+                if ($hostname && $ipAddress) {
+                    $this->hostnameIpMap[$hostname] = $ipAddress;
+                }
+            }
+            
+            error_log("NetshotAPI: Built hostname-to-IP map with " . count($this->hostnameIpMap) . " entries");
+            
+        } catch (Exception $e) {
+            error_log("NetshotAPI: Error reading devices from Netshot: " . $e->getMessage());
+        }
+        
+        // Step 2: Get alias mappings from MySQL and create alias-to-IP lookup
+        try {
+            if (!class_exists('Database')) {
+                require_once __DIR__ . '/Database.php';
+            }
+            
+            $db = new Database();
+            $sql = "SELECT UPPER(alias) as alias, UPPER(ccap_name) as ccap_name FROM reporting.acc_alias WHERE active = 1";
+            $aliasResults = $db->query($sql);
+            
+            error_log("NetshotAPI: Retrieved " . count($aliasResults) . " alias mappings from MySQL");
+            
+            // Create alias-to-IP mapping using the hostname-to-IP map
+            foreach ($aliasResults as $aliasRow) {
+                $alias = $aliasRow['alias'];
+                $ccapHostname = $aliasRow['ccap_name'];
+                
+                // If we have the IP for this CCAP hostname, map it to the alias
+                if (isset($this->hostnameIpMap[$ccapHostname])) {
+                    $this->aliasIpMap[$alias] = [
+                        'ip_address' => $this->hostnameIpMap[$ccapHostname],
+                        'ccap_hostname' => $ccapHostname
+                    ];
+                }
+            }
+            
+            error_log("NetshotAPI: Built alias-to-IP map with " . count($this->aliasIpMap) . " entries");
+            
+        } catch (Exception $e) {
+            error_log("NetshotAPI: Error reading alias mappings from MySQL: " . $e->getMessage());
+        }
+        
+        $this->mapInitialized = true;
+        $duration = microtime(true) - $startTime;
+        error_log("NetshotAPI: Memory mapping initialization completed in " . round($duration, 3) . " seconds");
+    }
+    
+    /**
+     * Lookup IP address from memory for a given hostname (direct CCAP or alias)
+     * 
+     * @param string $hostname The hostname to lookup
+     * @return array|null Array with ip_address and optionally ccap_hostname, or null if not found
+     */
+    public function lookupIpFromMemory($hostname) {
+        // Ensure mappings are initialized
+        $this->initializeMemoryMappings();
+        
+        $upperHostname = strtoupper($hostname);
+        
+        // First check if it's a direct CCAP hostname
+        if (isset($this->hostnameIpMap[$upperHostname])) {
+            return [
+                'ip_address' => $this->hostnameIpMap[$upperHostname],
+                'is_alias' => false
+            ];
+        }
+        
+        // Then check if it's an alias
+        if (isset($this->aliasIpMap[$upperHostname])) {
+            return [
+                'ip_address' => $this->aliasIpMap[$upperHostname]['ip_address'],
+                'ccap_hostname' => $this->aliasIpMap[$upperHostname]['ccap_hostname'],
+                'is_alias' => true
+            ];
+        }
+        
+        return null; // Not found in memory
     }
     
     /**
@@ -596,20 +736,53 @@ class NetshotAPI {
             return $dbDevice;
         }
         
-        // Get the hostname and check if it's an ABR/DBR/CBR pattern first
-        $hostname = $dbDevice['hostname'];
-        $originalHostname = $hostname;
-        
+        $originalHostname = $dbDevice['hostname'];
         error_log("enrichDeviceData: Starting enrichment for hostname: $originalHostname");
         
+        // Step 1: Try to get IP from memory lookup first (much faster)
+        $memoryResult = $this->lookupIpFromMemory($originalHostname);
+        
+        if ($memoryResult) {
+            error_log("enrichDeviceData: Found IP in memory for '$originalHostname': " . $memoryResult['ip_address']);
+            
+            // Add the IP address and preserve original hostname
+            $dbDevice['ip_address'] = $memoryResult['ip_address'];
+            $dbDevice['hostname'] = $originalHostname; // Always preserve original hostname
+            
+            if ($memoryResult['is_alias']) {
+                $dbDevice['ccap_hostname'] = $memoryResult['ccap_hostname'];
+                error_log("enrichDeviceData: Successfully resolved alias '$originalHostname' to IP via CCAP '{$memoryResult['ccap_hostname']}'");
+            } else {
+                error_log("enrichDeviceData: Successfully resolved direct hostname '$originalHostname' to IP");
+            }
+            
+            // Add Netshot metadata by looking up the CCAP device
+            $ccapHostname = $memoryResult['is_alias'] ? $memoryResult['ccap_hostname'] : $originalHostname;
+            $netshotDevice = $this->getDeviceByHostname($ccapHostname, false);
+            
+            if ($netshotDevice) {
+                $dbDevice['netshot_id'] = $netshotDevice['id'] ?? null;
+                $dbDevice['netshot_status'] = $netshotDevice['status'] ?? null;
+                $dbDevice['netshot_family'] = $netshotDevice['family'] ?? null;
+                $dbDevice['netshot_software_version'] = $netshotDevice['softwareVersion'] ?? null;
+                error_log("enrichDeviceData: Added Netshot metadata for '$originalHostname'");
+            }
+            
+            return $dbDevice;
+        }
+        
+        // Step 2: Fallback to old method if not found in memory
+        error_log("enrichDeviceData: Not found in memory, falling back to direct Netshot lookup for: $originalHostname");
+        
         // Map ABR/DBR/CBR hostname to CCAP if applicable
-        $hostname = $this->mapAbrToCcapHostname($hostname);
-        if ($hostname !== $originalHostname) {
-            error_log("enrichDeviceData: Hostname mapped from ABR/DBR/CBR $originalHostname to CCAP $hostname");
+        $hostname = $this->mapAbrToCcapHostname($originalHostname);
+        $isAliasedDevice = ($hostname !== $originalHostname);
+        
+        if ($isAliasedDevice) {
+            error_log("enrichDeviceData: Hostname mapped from alias $originalHostname to CCAP $hostname");
         }
         
         // Set validateFormat to false to maintain backward compatibility
-        // This will still only search in INPRODUCTION devices
         $netshotDevice = $this->getDeviceByHostname($hostname, false);
         
         error_log("enrichDeviceData: getDeviceByHostname result for '$hostname': " . 
@@ -672,12 +845,27 @@ class NetshotAPI {
         $dbDevice['netshot_family'] = $netshotDevice['family'] ?? null;
         $dbDevice['netshot_software_version'] = $netshotDevice['softwareVersion'] ?? null;
         
+        // For aliased devices, preserve the original alias hostname but add IP from CCAP
+        if ($isAliasedDevice) {
+            $dbDevice['hostname'] = $originalHostname; // Keep the alias name (ABR/DBR/CBR)
+            $dbDevice['ccap_hostname'] = $hostname; // Store the CCAP hostname for reference
+            error_log("enrichDeviceData: Preserving alias hostname '$originalHostname' while using CCAP '$hostname' for IP lookup");
+        }
+        
         // Add IP address if found
         if ($ipAddress) {
             $dbDevice['ip_address'] = $ipAddress;
-            error_log("enrichDeviceData: Successfully enriched hostname '$originalHostname' with IP: $ipAddress");
+            if ($isAliasedDevice) {
+                error_log("enrichDeviceData: Successfully enriched alias '$originalHostname' with IP from CCAP '$hostname': $ipAddress");
+            } else {
+                error_log("enrichDeviceData: Successfully enriched hostname '$originalHostname' with IP: $ipAddress");
+            }
         } else {
-            error_log("enrichDeviceData: No IP address available for hostname: $originalHostname");
+            if ($isAliasedDevice) {
+                error_log("enrichDeviceData: No IP address available for alias '$originalHostname' (CCAP: '$hostname')");
+            } else {
+                error_log("enrichDeviceData: No IP address available for hostname: $originalHostname");
+            }
         }
         
         return $dbDevice;
