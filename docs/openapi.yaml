@@ -1,0 +1,434 @@
+openapi: 3.0.3
+info:
+  title: ISW CMDB REST API with Netshot Integration
+  description: |
+    A PHP REST API for querying a MySQL CMDB database with enhanced Netshot integration for device discovery and real-time IP address resolution.
+    
+    ## Key Features
+    - **Netshot Integration**: Real-time device discovery and IP address lookup from Netshot OSS
+    - **Alias Support**: Automatic mapping between CCAP hostnames and user-friendly aliases (ABR/DBR/CBR)
+    - **Wildcard Search**: Advanced pattern matching for both hostnames and IP addresses
+    - **REST Compliance**: PascalCase field names for consistent API responses
+    - **Memory Caching**: In-memory hostname-to-IP mapping for optimal performance
+  version: 2.0.0
+  contact:
+    name: ISW CMDB API Support
+    email: admin@example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://appdb.oss.local/isw
+    description: Development server
+  - url: https://your-domain.com/isw
+    description: Production server
+
+security:
+  - BasicAuth: []
+
+paths:
+  /api/search:
+    get:
+      tags:
+        - Search
+        - Hostname Search
+        - IP Search
+      summary: Search devices (GET method)
+      description: Search for devices by hostname or IP address with optional wildcard support using query parameters
+      operationId: searchDevicesGet
+      parameters:
+        - name: type
+          in: query
+          required: true
+          description: Type of search to perform
+          schema:
+            type: string
+            enum: [hostname, ip]
+          example: hostname
+        - name: q
+          in: query
+          required: true
+          description: Search query string
+          schema:
+            type: string
+          examples:
+            hostname_exact:
+              summary: Exact CCAP hostname search
+              value: GV-RC0011-CCAP003
+            hostname_wildcard:
+              summary: Wildcard CCAP search
+              value: "*CCAP*"
+            alias_exact:
+              summary: Exact alias search
+              value: gv02abr001
+            alias_wildcard:
+              summary: Wildcard alias search
+              value: "*abr*"
+            ip_exact:
+              summary: Exact IP search
+              value: 172.28.88.15
+            ip_wildcard_subnet:
+              summary: Subnet wildcard search
+              value: 172.28.88.*
+            ip_wildcard_network:
+              summary: Network wildcard search
+              value: 172.28.*.*
+        - name: api_key
+          in: query
+          required: false
+          description: API key for authentication (can also be provided via X-API-Key header)
+          schema:
+            type: string
+          example: dev-key-12345
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: integer
+                    example: 200
+                  search_type:
+                    type: string
+                    example: hostname
+                  query:
+                    type: string
+                    example: CCAP*
+                  count:
+                    type: integer
+                    example: 8
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Device'
+              examples:
+                hostname_search:
+                  value:
+                    status: 200
+                    search_type: hostname
+                    query: "GV-*CCAP*"
+                    count: 2
+                    data:
+                      - Id: 12345
+                        Name: "GV-RC0011-CCAP003"
+                        IpAddress: "172.28.88.15"
+                        Alias: "gv02abr001"
+                        Model: "Casa Systems C100G"
+                        Vendor: "Casa Systems"
+                        Status: "INPRODUCTION"
+                        SoftwareVersion: "4.2.1-RELEASE"
+                        LastCheck: "2025-07-24T06:30:00Z"
+                ip_search:
+                  value:
+                    status: 200
+                    search_type: ip
+                    query: "172.28.88.*"
+                    count: 3
+                    data:
+                      - Id: 12345
+                        Name: "GV-RC0011-CCAP003"
+                        IpAddress: "172.28.88.15"
+                        Alias: "gv02abr001"
+                        Model: "Casa Systems C100G"
+                        Vendor: "Casa Systems"
+                        Status: "INPRODUCTION"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+    post:
+      tags:
+        - Search
+        - Netshot Integration
+      summary: Search devices (POST method)
+      description: Search for devices by hostname or IP address with JSON request body and enhanced Netshot integration
+      operationId: searchDevicesPost
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+            examples:
+              hostname_search:
+                value:
+                  Header:
+                    BusinessTransactionID: "12345"
+                    SentTimestamp: "2025-07-24T06:30:00Z"
+                    SourceContext:
+                      host: "statsit.example.com"
+                      application: "StatsIT"
+                  Body:
+                    HostName: "GV-RC0052-CCAP002"
+              ip_search:
+                value:
+                  Header:
+                    BusinessTransactionID: "12348"
+                    SentTimestamp: "2025-07-24T06:33:00Z"
+                    SourceContext:
+                      host: "ipam.example.com"
+                      application: "IPAM"
+                  Body:
+                    IPAddress: "172.28.88.26"
+      responses:
+        '200':
+          description: Successful response with device data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/ServerError'
+
+  /api/health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Check the health status of the API
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: "2024-07-18 14:30:00"
+                  version:
+                    type: string
+                    example: "1.0.0"
+
+  /:
+    get:
+      summary: API information
+      description: Get basic information about the API and available endpoints
+      operationId: getApiInfo
+      security: []
+      responses:
+        '200':
+          description: API information
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "ISW CMDB API"
+                  version:
+                    type: string
+                    example: "1.0.0"
+                  endpoints:
+                    type: object
+                    properties:
+                      search:
+                        type: string
+                        example: "/api/search?type={hostname|ip}&q={query}&api_key={key}"
+                      health:
+                        type: string
+                        example: "/api/health"
+
+components:
+  securitySchemes:
+    BasicAuth:
+      type: http
+      scheme: basic
+      description: HTTP Basic Authentication with username and password
+
+  schemas:
+    Device:
+      type: object
+      properties:
+        Id:
+          type: integer
+          description: Unique device identifier from Netshot
+          example: 12345
+        Name:
+          type: string
+          description: Primary device hostname (always CCAP format when available)
+          example: "GV-RC0011-CCAP003"
+        IpAddress:
+          type: string
+          format: ipv4
+          description: Device IP address resolved from Netshot
+          example: "172.28.88.15"
+        Alias:
+          type: string
+          description: User-friendly alias name (ABR/DBR/CBR format when available)
+          example: "gv02abr001"
+        Model:
+          type: string
+          description: Device model/family from Netshot
+          example: "Casa Systems C100G"
+        Vendor:
+          type: string
+          description: Device vendor/domain from Netshot
+          example: "Casa Systems"
+        Status:
+          type: string
+          enum: [INPRODUCTION, MAINTENANCE, INVENTORY, UNKNOWN]
+          description: Current device status from Netshot
+          example: "INPRODUCTION"
+        SoftwareVersion:
+          type: string
+          description: Device software version from Netshot
+          example: "4.2.1-RELEASE"
+        LastCheck:
+          type: string
+          format: date-time
+          description: Last time device was checked in Netshot
+          example: "2025-07-24T06:30:00Z"
+      required:
+        - Name
+        - IpAddress
+
+    SearchRequest:
+      type: object
+      properties:
+        Header:
+          type: object
+          properties:
+            BusinessTransactionID:
+              type: string
+              example: "1"
+            SentTimestamp:
+              type: string
+              format: date-time
+              example: "2023-11-10T09:20:00"
+            SourceContext:
+              type: object
+              properties:
+                host:
+                  type: string
+                application:
+                  type: string
+        Body:
+          type: object
+          oneOf:
+            - properties:
+                HostName:
+                  type: string
+                  description: Hostname to search (CCAP or alias format)
+                  examples:
+                    - "GV-RC0052-CCAP002"
+                    - "gv02abr001" 
+                    - "*CCAP*"
+              required: [HostName]
+            - properties:
+                IPAddress:
+                  type: string
+                  description: IP address to search (exact or with wildcards)
+                  examples:
+                    - "172.28.88.26"
+                    - "172.28.88.*"
+              required: [IPAddress]
+
+    SearchResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 200
+        search_type:
+          type: string
+          enum: [hostname, ip]
+          example: hostname
+        query:
+          type: string
+          example: GV-RC0052-CCAP002
+        count:
+          type: integer
+          example: 1
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Device'
+        request:
+          type: object
+          properties:
+            header:
+              type: object
+            body:
+              type: object
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        status:
+          type: integer
+          description: HTTP status code
+      required:
+        - error
+        - status
+
+  responses:
+    BadRequest:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            missing_params:
+              value:
+                error: "Missing required parameters: type and q"
+                status: 400
+            invalid_hostname:
+              value:
+                error: "Invalid hostname format. Expected: 4char-2char4num-CCAPxxx or CCAP* for wildcard"
+                status: 400
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            value:
+              error: "Invalid or missing API key"
+              status: 401
+    ServerError:
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            value:
+              error: "Internal server error: Database connection failed"
+              status: 500
+
+tags:
+  - name: Search
+    description: Device search operations with Netshot integration
+  - name: Hostname Search
+    description: Search devices by hostname (CCAP or alias format)
+  - name: IP Search  
+    description: Search devices by IP address with wildcard support
+  - name: Health
+    description: API health and status operations
+  - name: Netshot Integration
+    description: Real-time device discovery and IP resolution

@@ -89,6 +89,8 @@
                 validatorUrl: null,
                 tryItOutEnabled: true,
                 requestInterceptor: function(request) {
+                    console.log('Outgoing request:', request);
+                    
                     // Add default API key if none provided
                     if (!request.headers['X-API-Key'] && !request.url.includes('api_key=')) {
                         if (request.url.includes('?')) {
@@ -97,11 +99,48 @@
                             request.url += '?api_key=dev-key-12345';
                         }
                     }
+                    
+                    // Ensure proper headers for CORS
+                    if (!request.headers) {
+                        request.headers = {};
+                    }
+                    
+                    // Add basic auth if available
+                    if (!request.headers['Authorization'] && window.basicAuth) {
+                        request.headers['Authorization'] = 'Basic ' + btoa(window.basicAuth.username + ':' + window.basicAuth.password);
+                    }
+                    
                     return request;
                 },
+                responseInterceptor: function(response) {
+                    console.log('Incoming response:', response);
+                    if (response.status >= 400) {
+                        console.error('API Error:', response);
+                    }
+                    return response;
+                },
                 onComplete: function() {
-                    // Add custom styling after load
-                    console.log('Swagger UI loaded successfully');
+                    // Set up basic auth credentials automatically
+                    try {
+                        window.basicAuth = {
+                            username: 'admin',
+                            password: 'password123'
+                        };
+                        
+                        // Pre-authorize basic auth if the security scheme exists
+                        if (ui.authActions) {
+                            ui.authActions.authorize({
+                                BasicAuth: {
+                                    username: 'admin',
+                                    password: 'password123'
+                                }
+                            });
+                        }
+                        
+                        console.log('Swagger UI loaded successfully with Basic Auth configured');
+                    } catch (e) {
+                        console.warn('Could not set up automatic Basic Auth:', e);
+                    }
                 },
                 docExpansion: 'list',
                 defaultModelsExpandDepth: 1,

@@ -15,7 +15,7 @@
   },
   "servers": [
     {
-      "url": "http://localhost/isw",
+      "url": "http://appdb.oss.local/isw",
       "description": "Development server"
     },
     {
