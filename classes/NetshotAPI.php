@@ -384,8 +384,9 @@ class NetshotAPI {
     
     /**
      * Lookup IP address from memory for a given hostname (direct CCAP or alias)
+     * Supports wildcard searches with * or %
      * 
-     * @param string $hostname The hostname to lookup
+     * @param string $hostname The hostname to lookup (can include wildcards)
      * @return array|null Array with ip_address and optionally ccap_hostname, or null if not found
      */
     public function lookupIpFromMemory($hostname) {
@@ -394,6 +395,15 @@ class NetshotAPI {
         
         $upperHostname = strtoupper($hostname);
         
+        // Check if it's a wildcard search
+        $hasWildcard = (strpos($upperHostname, '*') !== false || strpos($upperHostname, '%') !== false);
+        
+        if ($hasWildcard) {
+            // Handle wildcard search
+            return $this->wildcardLookupInMemory($upperHostname);
+        }
+        
+        // Exact hostname lookup
         // First check if it's a direct CCAP hostname
         if (isset($this->hostnameIpMap[$upperHostname])) {
             return [
@@ -412,6 +422,78 @@ class NetshotAPI {
         }
         
         return null; // Not found in memory
+    }
+    
+    /**
+     * Perform wildcard search in memory maps
+     * 
+     * @param string $pattern Wildcard pattern (with * or %)
+     * @return array Array of matching results
+     */
+    private function wildcardLookupInMemory($pattern) {
+        // Convert wildcards to regex pattern
+        $regexPattern = '/^' . str_replace(['*', '%'], ['.*', '.*'], preg_quote($pattern, '/')) . '$/i';
+        
+        $matches = [];
+        
+        // Search in direct CCAP hostnames
+        foreach ($this->hostnameIpMap as $hostname => $ipAddress) {
+            if (preg_match($regexPattern, $hostname)) {
+                $matches[] = [
+                    'hostname' => $hostname,
+                    'ip_address' => $ipAddress,
+                    'is_alias' => false
+                ];
+            }
+        }
+        
+        // Search in aliases
+        foreach ($this->aliasIpMap as $alias => $data) {
+            if (preg_match($regexPattern, $alias)) {
+                $matches[] = [
+                    'hostname' => $alias,
+                    'ip_address' => $data['ip_address'],
+                    'ccap_hostname' => $data['ccap_hostname'],
+                    'is_alias' => true
+                ];
+            }
+        }
+        
+        error_log("NetshotAPI: Wildcard search '$pattern' found " . count($matches) . " matches");
+        
+        return $matches;
+    }
+    
+    /**
+     * Search hostnames by wildcard pattern using memory maps
+     * 
+     * @param string $pattern Wildcard pattern (with * or %)
+     * @return array Array of matching hostnames with IP addresses
+     */
+    public function searchHostnamesByWildcard($pattern) {
+        // Ensure mappings are initialized
+        $this->initializeMemoryMappings();
+        
+        $upperPattern = strtoupper($pattern);
+        
+        // Check if it's a wildcard search
+        $hasWildcard = (strpos($upperPattern, '*') !== false || strpos($upperPattern, '%') !== false);
+        
+        if (!$hasWildcard) {
+            // Not a wildcard, use regular lookup
+            $result = $this->lookupIpFromMemory($pattern);
+            if ($result) {
+                return [$result];
+            }
+            return [];
+        }
+        
+        // Use the wildcard lookup
+        $matches = $this->wildcardLookupInMemory($upperPattern);
+        
+        error_log("NetshotAPI: searchHostnamesByWildcard('$pattern') found " . count($matches) . " matches");
+        
+        return $matches;
     }
     
     /**
@@ -742,33 +824,43 @@ class NetshotAPI {
         // Step 1: Try to get IP from memory lookup first (much faster)
         $memoryResult = $this->lookupIpFromMemory($originalHostname);
         
+        // Handle both single result and wildcard results
         if ($memoryResult) {
-            error_log("enrichDeviceData: Found IP in memory for '$originalHostname': " . $memoryResult['ip_address']);
-            
-            // Add the IP address and preserve original hostname
-            $dbDevice['ip_address'] = $memoryResult['ip_address'];
-            $dbDevice['hostname'] = $originalHostname; // Always preserve original hostname
-            
-            if ($memoryResult['is_alias']) {
-                $dbDevice['ccap_hostname'] = $memoryResult['ccap_hostname'];
-                error_log("enrichDeviceData: Successfully resolved alias '$originalHostname' to IP via CCAP '{$memoryResult['ccap_hostname']}'");
-            } else {
-                error_log("enrichDeviceData: Successfully resolved direct hostname '$originalHostname' to IP");
+            // Check if it's a wildcard result (array of matches)
+            if (is_array($memoryResult) && isset($memoryResult[0])) {
+                // Multiple matches from wildcard - use first match
+                $memoryResult = $memoryResult[0];
+                error_log("enrichDeviceData: Using first match from wildcard search for '$originalHostname'");
             }
             
-            // Add Netshot metadata by looking up the CCAP device
-            $ccapHostname = $memoryResult['is_alias'] ? $memoryResult['ccap_hostname'] : $originalHostname;
-            $netshotDevice = $this->getDeviceByHostname($ccapHostname, false);
-            
-            if ($netshotDevice) {
-                $dbDevice['netshot_id'] = $netshotDevice['id'] ?? null;
-                $dbDevice['netshot_status'] = $netshotDevice['status'] ?? null;
-                $dbDevice['netshot_family'] = $netshotDevice['family'] ?? null;
-                $dbDevice['netshot_software_version'] = $netshotDevice['softwareVersion'] ?? null;
-                error_log("enrichDeviceData: Added Netshot metadata for '$originalHostname'");
+            if (isset($memoryResult['ip_address'])) {
+                error_log("enrichDeviceData: Found IP in memory for '$originalHostname': " . $memoryResult['ip_address']);
+                
+                // Add the IP address and preserve original hostname
+                $dbDevice['ip_address'] = $memoryResult['ip_address'];
+                $dbDevice['hostname'] = $originalHostname; // Always preserve original hostname
+                
+                if ($memoryResult['is_alias']) {
+                    $dbDevice['ccap_hostname'] = $memoryResult['ccap_hostname'];
+                    error_log("enrichDeviceData: Successfully resolved alias '$originalHostname' to IP via CCAP '{$memoryResult['ccap_hostname']}'");
+                } else {
+                    error_log("enrichDeviceData: Successfully resolved direct hostname '$originalHostname' to IP");
+                }
+                
+                // Add Netshot metadata by looking up the CCAP device
+                $ccapHostname = $memoryResult['is_alias'] ? $memoryResult['ccap_hostname'] : $originalHostname;
+                $netshotDevice = $this->getDeviceByHostname($ccapHostname, false);
+                
+                if ($netshotDevice) {
+                    $dbDevice['netshot_id'] = $netshotDevice['id'] ?? null;
+                    $dbDevice['netshot_status'] = $netshotDevice['status'] ?? null;
+                    $dbDevice['netshot_family'] = $netshotDevice['family'] ?? null;
+                    $dbDevice['netshot_software_version'] = $netshotDevice['softwareVersion'] ?? null;
+                    error_log("enrichDeviceData: Added Netshot metadata for '$originalHostname'");
+                }
+                
+                return $dbDevice;
             }
-            
-            return $dbDevice;
         }
         
         // Step 2: Fallback to old method if not found in memory

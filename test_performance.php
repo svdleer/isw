@@ -105,6 +105,46 @@ try {
     echo "Error testing aliases: " . $e->getMessage() . "\n";
 }
 
+echo "\n=== Testing Wildcard Hostname Search ===\n";
+
+// Test wildcard searches like the ones in your curl examples
+$wildcardTests = [
+    'AMF-RC0004*',
+    'amf-rc0004*', 
+    '*CCAP*',
+    '*AMF*'
+];
+
+foreach ($wildcardTests as $wildcard) {
+    echo "\n--- Testing wildcard: $wildcard ---\n";
+    
+    $start = microtime(true);
+    $wildcardResults = $netshot->searchHostnamesByWildcard($wildcard);
+    $wildcardTime = microtime(true) - $start;
+    
+    echo "Search time: " . round($wildcardTime * 1000, 2) . " ms\n";
+    echo "Found " . count($wildcardResults) . " matches\n";
+    
+    if (!empty($wildcardResults)) {
+        echo "Sample matches:\n";
+        $sampleCount = min(3, count($wildcardResults));
+        for ($i = 0; $i < $sampleCount; $i++) {
+            $match = $wildcardResults[$i];
+            echo "  - {$match['hostname']}: {$match['ip_address']}";
+            if ($match['is_alias']) {
+                echo " (alias → {$match['ccap_hostname']})";
+            }
+            echo "\n";
+        }
+        
+        if (count($wildcardResults) > 3) {
+            echo "  ... and " . (count($wildcardResults) - 3) . " more\n";
+        }
+    } else {
+        echo "❌ No matches found\n";
+    }
+}
+
 echo "\n=== Testing *ccap* vs *ccap0* Issue ===\n";
 
 // Test the specific issue you reported
