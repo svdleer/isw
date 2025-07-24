@@ -74,13 +74,6 @@ paths:
             ip_wildcard_network:
               summary: Network wildcard search
               value: 172.28.*.*
-        - name: api_key
-          in: query
-          required: false
-          description: API key for authentication (can also be provided via X-API-Key header)
-          schema:
-            type: string
-          example: dev-key-12345
       responses:
         '200':
           description: Successful response

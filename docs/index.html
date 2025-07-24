@@ -91,15 +91,6 @@
                 requestInterceptor: function(request) {
                     console.log('Outgoing request:', request);
                     
-                    // Add default API key if none provided
-                    if (!request.headers['X-API-Key'] && !request.url.includes('api_key=')) {
-                        if (request.url.includes('?')) {
-                            request.url += '&api_key=dev-key-12345';
-                        } else {
-                            request.url += '?api_key=dev-key-12345';
-                        }
-                    }
-                    
                     // Ensure proper headers for CORS
                     if (!request.headers) {
                         request.headers = {};
