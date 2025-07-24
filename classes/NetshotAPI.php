@@ -552,37 +552,39 @@ class NetshotAPI {
                     $displayHostname = strtoupper($originalHostname);
                     $aliasHostname = null;
                     
-                    // Handle migration scenario: if Netshot discovered device with alias name,
-                    // look up the target CCAP hostname from database for consistent results
+                    // Handle migration scenario: always determine the CCAP hostname and alias
                     if (preg_match('/(ABR|DBR|CBR)/i', $originalHostname)) {
+                        // Netshot discovered device with alias name - map to CCAP
                         error_log("Found device with alias name in Netshot: $originalHostname - looking up target CCAP name");
                         $ccapHostname = $this->mapAbrToCcapHostname($originalHostname);
                         if ($ccapHostname !== strtoupper($originalHostname)) {
-                            $aliasHostname = strtoupper($originalHostname); // Store the alias
+                            $aliasHostname = strtoupper($originalHostname); // Store the original as alias
                             $displayHostname = $ccapHostname; // Use CCAP as main hostname
                             error_log("Using target CCAP hostname $ccapHostname with alias $aliasHostname for consistency");
                         }
                     } else {
-                        // If it's already a CCAP hostname, check if there's an alias for it
+                        // Netshot discovered device with CCAP name - look up alias
                         $alias = $this->findAliasForCcapHostname($originalHostname);
                         if ($alias !== strtoupper($originalHostname)) {
                             $aliasHostname = $alias;
+                            $displayHostname = strtoupper($originalHostname); // Keep CCAP as main
                             error_log("Found alias $alias for CCAP hostname $originalHostname");
                         }
                     }
                     
                     $result = [
-                        'id' => $device['id'] ?? null,
-                        'name' => $displayHostname, // Always the CCAP hostname
-                        'ip' => $device['mgmtIp'] ?? '',
-                        'model' => $device['family'] ?? null,
-                        'vendor' => $device['domain'] ?? null,
-                        'status' => $device['status'] ?? null
+                        'Id' => $device['id'] ?? null,
+                        'Name' => $displayHostname, // Always the CCAP hostname
+                        'IpAddress' => $device['mgmtIp'] ?? '',
+                        'Model' => $device['family'] ?? null,
+                        'Vendor' => $device['domain'] ?? null,
+                        'Status' => $device['status'] ?? null
                     ];
                     
-                    // Add alias if one exists
-                    if ($aliasHostname) {
-                        $result['alias'] = $aliasHostname;
+                    // Always add alias if one exists
+                    if ($aliasHostname && $aliasHostname !== $displayHostname) {
+                        $result['Alias'] = $aliasHostname;
+                        error_log("Added Alias field: $aliasHostname for device $displayHostname");
                     }
                     
                     $results[] = $result;
@@ -852,40 +854,42 @@ class NetshotAPI {
                 $displayHostname = strtoupper($originalHostname);
                 $aliasHostname = null;
                 
-                // Handle migration scenario: if Netshot discovered device with alias name,
-                // look up the target CCAP hostname from database for consistent results
+                // Handle migration scenario: always determine the CCAP hostname and alias
                 if (preg_match('/(ABR|DBR|CBR)/i', $originalHostname)) {
+                    // Netshot discovered device with alias name - map to CCAP
                     error_log("Found device with alias name in Netshot for IP $ipAddress: $originalHostname - looking up target CCAP name");
                     $ccapHostname = $this->mapAbrToCcapHostname($originalHostname);
                     if ($ccapHostname !== strtoupper($originalHostname)) {
-                        $aliasHostname = strtoupper($originalHostname); // Store the alias
+                        $aliasHostname = strtoupper($originalHostname); // Store the original as alias
                         $displayHostname = $ccapHostname; // Use CCAP as main hostname
                         error_log("Using target CCAP hostname $ccapHostname with alias $aliasHostname for consistency");
                     }
                 } else {
-                    // If it's already a CCAP hostname, check if there's an alias for it
+                    // Netshot discovered device with CCAP name - look up alias
                     $alias = $this->findAliasForCcapHostname($originalHostname);
                     if ($alias !== strtoupper($originalHostname)) {
                         $aliasHostname = $alias;
+                        $displayHostname = strtoupper($originalHostname); // Keep CCAP as main
                         error_log("Found alias $alias for CCAP hostname $originalHostname");
                     }
                 }
                 
                 // Format the response consistently and ensure hostname is uppercase
                 $result = [
-                    'id' => $device['id'] ?? null,
-                    'name' => $displayHostname, // Always the CCAP hostname
-                    'ip' => $device['mgmtIp'] ?? $ipAddress,
-                    'model' => $device['family'] ?? null,
-                    'vendor' => $device['domain'] ?? null,
-                    'status' => $device['status'] ?? null,
-                    'software_version' => $device['softwareVersion'] ?? null,
-                    'last_check' => $device['lastCheck'] ?? null
+                    'Id' => $device['id'] ?? null,
+                    'Name' => $displayHostname, // Always the CCAP hostname
+                    'IpAddress' => $device['mgmtIp'] ?? $ipAddress,
+                    'Model' => $device['family'] ?? null,
+                    'Vendor' => $device['domain'] ?? null,
+                    'Status' => $device['status'] ?? null,
+                    'SoftwareVersion' => $device['softwareVersion'] ?? null,
+                    'LastCheck' => $device['lastCheck'] ?? null
                 ];
                 
-                // Add alias if one exists
-                if ($aliasHostname) {
-                    $result['alias'] = $aliasHostname;
+                // Always add alias if one exists
+                if ($aliasHostname && $aliasHostname !== $displayHostname) {
+                    $result['Alias'] = $aliasHostname;
+                    error_log("Added Alias field: $aliasHostname for device $displayHostname");
                 }
                 
                 return $result;
