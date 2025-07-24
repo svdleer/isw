@@ -72,26 +72,6 @@ function generateIpFromHostname($hostname) {
     // This function is deprecated. IP addresses should ONLY come from Netshot.
     error_log("WARNING: generateIpFromHostname called but is deprecated. IP addresses should ONLY come from Netshot for: " . $hostname);
     return null; // Always return null to ensure Netshot is used as the source of truth
-    
-    // The following code is kept commented out for reference but should never be used
-    /*
-    // Example pattern: GV-RC0011-CCAP003
-    if (preg_match('/([A-Z]{2})-([A-Z]{2})(\d{4})-CCAP(\d{3})/i', $hostname, $matches)) {
-        // IP generation logic removed - use Netshot only
-        return null;
-    }
-    // Simpler pattern: just CCAP followed by numbers
-    elseif (preg_match('/CCAP(\d+)/i', $hostname, $matches)) {
-        // IP generation logic removed - use Netshot only
-        return null;
-    }
-    // Default case: IP generation logic removed - use Netshot only
-    else {
-        $hash = crc32($hostname);
-        $thirdOctet = ($hash & 0xFF) % 254 + 1; // 1-254
-        $fourthOctet = (($hash >> 8) & 0xFF) % 254 + 1; // 1-254
-        return "172.20.{$thirdOctet}.{$fourthOctet}";
-    }
 }
 
 try {
