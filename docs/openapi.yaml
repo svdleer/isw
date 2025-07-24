@@ -19,7 +19,7 @@ info:
     url: https://opensource.org/licenses/MIT
 
 servers:
-  - url: http://appdb.oss.local/isw
+  - url: https://appdb.oss.local/isw
     description: Development server
   - url: https://your-domain.com/isw
     description: Production server
