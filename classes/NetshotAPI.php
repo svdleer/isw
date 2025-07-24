@@ -551,16 +551,8 @@ class NetshotAPI {
                     $originalHostname = $device['name'] ?? '';
                     $displayHostname = strtoupper($originalHostname);
                     
-                    // Check if this device hostname contains ABR/DBR/CBR patterns
-                    // If so, look up the alias to show the user-friendly name instead
-                    if (preg_match('/(ABR|DBR|CBR)/i', $originalHostname)) {
-                        error_log("Found ABR/DBR/CBR device in IP wildcard search: $originalHostname - looking up alias");
-                        $aliasHostname = $this->findAliasForCcapHostname($originalHostname);
-                        if ($aliasHostname !== strtoupper($originalHostname)) {
-                            $displayHostname = $aliasHostname;
-                            error_log("Using alias hostname $aliasHostname instead of CCAP hostname $originalHostname for IP wildcard result");
-                        }
-                    }
+                    // For IP searches, always return the actual CCAP hostname from Netshot
+                    // Don't convert to alias - users searching by IP want to see the real device name
                     
                     $results[] = [
                         'id' => $device['id'] ?? null,
@@ -835,16 +827,8 @@ class NetshotAPI {
                 $originalHostname = $device['name'] ?? '';
                 $displayHostname = strtoupper($originalHostname);
                 
-                // Check if this device hostname contains ABR/DBR/CBR patterns
-                // If so, look up the alias to show the user-friendly name instead
-                if (preg_match('/(ABR|DBR|CBR)/i', $originalHostname)) {
-                    error_log("Found ABR/DBR/CBR device for IP $ipAddress: $originalHostname - looking up alias");
-                    $aliasHostname = $this->findAliasForCcapHostname($originalHostname);
-                    if ($aliasHostname !== strtoupper($originalHostname)) {
-                        $displayHostname = $aliasHostname;
-                        error_log("Using alias hostname $aliasHostname instead of CCAP hostname $originalHostname for IP search result");
-                    }
-                }
+                // For IP searches, always return the actual CCAP hostname from Netshot
+                // Don't convert to alias - users searching by IP want to see the real device name
                 
                 // Format the response consistently and ensure hostname is uppercase
                 $result = [
