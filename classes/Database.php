@@ -7,17 +7,43 @@ class Database {
     private $config;
 
     public function __construct() {
-        $this->config = require_once __DIR__ . '/../config/database.php';
+        $this->config = require __DIR__ . '/../config/database.php';
+        
+        // Validate config was loaded properly
+        if (!is_array($this->config)) {
+            throw new Exception("Database configuration could not be loaded");
+        }
+        
         $this->connect();
     }
 
     private function connect() {
         try {
+            // Use utf8 instead of utf8mb4 for better compatibility
+            $charset = isset($this->config['charset']) ? $this->config['charset'] : 'utf8';
+            
+            // Try utf8 if utf8mb4 fails
+            if ($charset === 'utf8mb4') {
+                $charset = 'utf8';
+            }
+            
             // Connect without specifying a database to allow cross-database queries
-            $dsn = "mysql:host={$this->config['host']};charset={$this->config['charset']}";
+            $dsn = "mysql:host={$this->config['host']};charset={$charset}";
             $this->connection = new PDO($dsn, $this->config['username'], $this->config['password'], $this->config['options']);
         } catch (PDOException $e) {
-            throw new Exception("Database connection failed: " . $e->getMessage());
+            // If charset fails, try without charset specification
+            if (strpos($e->getMessage(), 'character set') !== false) {
+                try {
+                    $dsn = "mysql:host={$this->config['host']}";
+                    $this->connection = new PDO($dsn, $this->config['username'], $this->config['password'], $this->config['options']);
+                    // Set charset after connection
+                    $this->connection->exec("SET NAMES utf8");
+                } catch (PDOException $e2) {
+                    throw new Exception("Database connection failed: " . $e2->getMessage());
+                }
+            } else {
+                throw new Exception("Database connection failed: " . $e->getMessage());
+            }
         }
     }
 

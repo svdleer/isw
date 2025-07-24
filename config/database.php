@@ -12,7 +12,7 @@ return [
     'host' => $_ENV['DB_HOST'] ?? 'localhost',
     'username' => $_ENV['DB_USER'] ?? 'root',
     'password' => $_ENV['DB_PASS'] ?? '',
-    'charset' => 'utf8mb4',
+    'charset' => 'utf8',  // Changed from utf8mb4 for better compatibility
     'options' => [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
