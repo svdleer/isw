@@ -544,17 +544,17 @@ try {
                 try {
                     $netshotDevice = $netshot->getDeviceByIP($searchQuery);
                     if ($netshotDevice) {
-                        error_log("Device found in Netshot: " . ($netshotDevice['name'] ?? 'unknown'));
+                        error_log("Device found in Netshot: " . ($netshotDevice['Name'] ?? 'unknown'));
                         // Create a result entry with Netshot data - use the IP from the device data, not the search query
-                        $deviceIp = $netshotDevice['ip'] ?? $searchQuery; // Fallback to search query if device IP not found
+                        $deviceIp = $netshotDevice['IpAddress'] ?? $searchQuery; // Fallback to search query if device IP not found
                         
                         $results[] = [
-                            'hostname' => strtoupper($netshotDevice['name'] ?? 'Unknown'),
+                            'hostname' => strtoupper($netshotDevice['Name'] ?? 'Unknown'),
                             'ip_address' => $deviceIp,
                             'netshot' => $netshotDevice
                         ];
                         
-                        error_log("Added exact IP result: hostname=" . ($netshotDevice['name'] ?? 'Unknown') . ", ip=" . $deviceIp);
+                        error_log("Added exact IP result: hostname=" . ($netshotDevice['Name'] ?? 'Unknown') . ", ip=" . $deviceIp);
                     } else {
                         error_log("No device found in Netshot for IP: " . $searchQuery);
                         // No fallback needed - if Netshot doesn't have the device, it likely doesn't exist
@@ -576,8 +576,8 @@ try {
                     
                     foreach ($netshotResults as $netshotDevice) {
                         $results[] = [
-                            'hostname' => strtoupper($netshotDevice['name'] ?? 'Unknown'),
-                            'ip_address' => $netshotDevice['ip'] ?? '',
+                            'hostname' => strtoupper($netshotDevice['Name'] ?? 'Unknown'),
+                            'ip_address' => $netshotDevice['IpAddress'] ?? '',
                             'netshot' => $netshotDevice
                         ];
                     }
