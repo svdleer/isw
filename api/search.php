@@ -318,6 +318,38 @@ try {
             
             // Log the final search query for debugging
             error_log("Final hostname search query: " . $searchQuery);
+            
+            // NEW: Try memory-based wildcard search first for better performance
+            $memoryResults = [];
+            if ($hasWildcard) {
+                error_log("Attempting memory-based wildcard search for: " . $originalQuery);
+                
+                try {
+                    $startTime = microtime(true);
+                    $memoryMatches = $netshot->searchHostnamesByWildcard($originalQuery);
+                    $memoryTime = microtime(true) - $startTime;
+                    
+                    error_log("Memory wildcard search completed in " . round($memoryTime, 3) . " seconds, found " . count($memoryMatches) . " matches");
+                    
+                    if (!empty($memoryMatches)) {
+                        // Convert memory results to the expected format
+                        foreach ($memoryMatches as $match) {
+                            $memoryResults[] = [
+                                'hostname' => strtoupper($match['hostname']),
+                                'ip_address' => $match['ip_address']
+                            ];
+                        }
+                        
+                        error_log("Memory-based search successful - using " . count($memoryResults) . " results from memory");
+                        $results = $memoryResults;
+                        
+                        // Skip database search since we have results from memory
+                        break;
+                    }
+                } catch (Exception $e) {
+                    error_log("Memory-based search failed: " . $e->getMessage() . " - falling back to database");
+                }
+            }
             error_log("Query classification summary - Original: " . $originalQuery . 
                       ", isAbrFormat: " . ($isAbrFormat ? "Yes" : "No") . 
                       ", matchesAdAhPattern: " . ($matchesAdAhPattern ? "Yes" : "No") . 
