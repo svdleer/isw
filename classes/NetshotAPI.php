@@ -39,6 +39,9 @@ class NetshotAPI {
             $_ENV['NETSHOT_GROUP'] ?? 
             $_ENV['NETSHOT_GROUP_ID'] ?? 
             'ACCESS';
+            
+        // Log the configuration being used
+        error_log("NetshotAPI initialized with: URL=" . $this->apiUrl . ", Group=" . $this->group);
     }
 
     /**
@@ -155,9 +158,31 @@ class NetshotAPI {
                 $groupQueryParam = "groupNameFilter=" . urlencode($group);
                 error_log("Using group name filter: {$group}");
             } else {
-                // Default to a reasonable group ID if all else fails
-                $groupQueryParam = "group=240"; // Fallback to default group ID
-                error_log("Using fallback group ID: 240");
+                // Default to a reasonable group ID if all else fails, but first try to find available groups
+                error_log("Group parameter '{$group}' is not numeric or valid string. Checking available groups...");
+                
+                // Try to get available groups to help with debugging
+                $availableGroups = $this->getGroups();
+                if (!empty($availableGroups)) {
+                    error_log("Available Netshot groups: " . json_encode(array_map(function($g) {
+                        return ['id' => $g['id'] ?? 'unknown', 'name' => $g['name'] ?? 'unknown'];
+                    }, $availableGroups)));
+                    
+                    // Try to find a group that contains "ACCESS" in the name
+                    foreach ($availableGroups as $availableGroup) {
+                        if (isset($availableGroup['name']) && stripos($availableGroup['name'], 'ACCESS') !== false) {
+                            $groupQueryParam = "group=" . $availableGroup['id'];
+                            error_log("Found ACCESS group automatically: using group ID " . $availableGroup['id'] . " (name: " . $availableGroup['name'] . ")");
+                            break;
+                        }
+                    }
+                }
+                
+                // If we still don't have a group, use the fallback
+                if (empty($groupQueryParam)) {
+                    $groupQueryParam = "group=240"; // Fallback to default group ID
+                    error_log("Using fallback group ID: 240 (this group appears to be empty - check your Netshot configuration)");
+                }
             }
         }
         
