@@ -58,7 +58,7 @@ require_once 'classes/Database.php';
 $db = new Database();
 
 try {
-    $aliases = $db->query("SELECT alias, ccap_name FROM reporting.acc_alias WHERE active = 1 LIMIT 3");
+    $aliases = $db->query("SELECT alias, ccap_name FROM reporting.acc_alias LIMIT 3");
     
     if (!empty($aliases)) {
         echo "Found " . count($aliases) . " aliases in your database to test:\n";

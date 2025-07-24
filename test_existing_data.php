@@ -26,7 +26,7 @@ try {
     $db = new Database();
     
     // Get some sample aliases
-    $aliases = $db->query("SELECT alias, ccap_name FROM reporting.acc_alias WHERE active = 1 LIMIT 5");
+    $aliases = $db->query("SELECT alias, ccap_name FROM reporting.acc_alias LIMIT 5");
     
     if (empty($aliases)) {
         echo "   No active aliases found in database\n";

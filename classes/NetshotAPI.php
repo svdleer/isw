@@ -352,7 +352,7 @@ class NetshotAPI {
             }
             
             $db = new Database();
-            $sql = "SELECT UPPER(alias) as alias, UPPER(ccap_name) as ccap_name FROM reporting.acc_alias WHERE active = 1";
+            $sql = "SELECT UPPER(alias) as alias, UPPER(ccap_name) as ccap_name FROM reporting.acc_alias";
             $aliasResults = $db->query($sql);
             
             error_log("NetshotAPI: Retrieved " . count($aliasResults) . " alias mappings from MySQL");

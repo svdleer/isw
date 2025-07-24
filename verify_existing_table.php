@@ -41,12 +41,6 @@ try {
     $count = $db->query("SELECT COUNT(*) as total FROM reporting.acc_alias");
     echo "\n3. Total records: " . $count[0]['total'] . "\n";
     
-    // Check for active records
-    $activeCount = $db->query("SELECT COUNT(*) as active_count FROM reporting.acc_alias WHERE active = 1");
-    if (!empty($activeCount)) {
-        echo "   Active records: " . $activeCount[0]['active_count'] . "\n";
-    }
-    
     echo "\n✅ Table exists and is accessible\n";
     
 } catch (Exception $e) {
