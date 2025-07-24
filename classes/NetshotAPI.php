@@ -9,6 +9,9 @@ class NetshotAPI {
     private $apiUrl;
     private $apiKey;
     private $group;
+    private $devicesCache = null;
+    private $cacheTimestamp = null;
+    private $cacheLifetime = 300; // 5 minutes cache
     
     /**
      * Constructor
@@ -120,6 +123,52 @@ class NetshotAPI {
      * @return array Devices in the specified group
      */
     /**
+     * Check if cached data is still valid
+     * 
+     * @return bool True if cache is valid, false otherwise
+     */
+    private function isCacheValid() {
+        return $this->devicesCache !== null && 
+               $this->cacheTimestamp !== null && 
+               (time() - $this->cacheTimestamp) < $this->cacheLifetime;
+    }
+    
+    /**
+     * Clear the device cache
+     * 
+     * @return void
+     */
+    private function clearDeviceCache() {
+        $this->devicesCache = null;
+        $this->cacheTimestamp = null;
+    }
+    
+    /**
+     * Build an index of devices by hostname and IP for faster lookups
+     * 
+     * @param array $devices Array of devices to index
+     * @return array Indexed array with 'byHostname' and 'byIp' keys
+     */
+    private function buildDeviceIndex($devices) {
+        $index = ['byHostname' => [], 'byIp' => []];
+        
+        foreach ($devices as $device) {
+            // Index by hostname (case-insensitive)
+            if (isset($device['name']) && !empty($device['name'])) {
+                $hostname = strtoupper($device['name']);
+                $index['byHostname'][$hostname] = $device;
+            }
+            
+            // Index by IP address
+            if (isset($device['mgmtIp']) && !empty($device['mgmtIp'])) {
+                $index['byIp'][$device['mgmtIp']] = $device;
+            }
+        }
+        
+        return $index;
+    }
+
+    /**
      * Filter devices to only include those with INPRODUCTION status
      * 
      * @param array $devices Array of devices to filter
@@ -135,13 +184,20 @@ class NetshotAPI {
     }
     
     /**
-     * Get devices from a specific group
+     * Get devices from a specific group with caching
      * 
      * @param int|string|null $groupParam Optional override for the group ID/name to fetch devices from
      * @param bool $onlyInProduction Whether to filter for only INPRODUCTION devices (default: true)
+     * @param bool $useCache Whether to use cached results (default: true)
      * @return array Devices in the specified group
      */
-    public function getDevicesInGroup($groupParam = null, $onlyInProduction = true) {
+    public function getDevicesInGroup($groupParam = null, $onlyInProduction = true, $useCache = true) {
+        // Check cache first if enabled
+        if ($useCache && $this->isCacheValid()) {
+            error_log("Using cached device data (" . count($this->devicesCache) . " devices)");
+            return $onlyInProduction ? $this->filterInProductionDevices($this->devicesCache) : $this->devicesCache;
+        }
+        
         // Use parameter if provided, otherwise use the class property
         $group = $groupParam !== null ? $groupParam : $this->group;
         $groupQueryParam = '';
@@ -201,6 +257,9 @@ class NetshotAPI {
             // Skip SSL verification for development environments
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
             curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+            // Add timeout to prevent hanging
+            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
             
             $response = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -212,8 +271,19 @@ class NetshotAPI {
             
             curl_close($ch);
             
-            $result = json_decode($response, true) ?: [];
-            error_log("Retrieved " . count($result) . " devices from Netshot using {$groupQueryParam}");
+            // Parse JSON with error handling
+            $result = json_decode($response, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                error_log("JSON decode error: " . json_last_error_msg() . " - Response length: " . strlen($response));
+                return [];
+            }
+            
+            $result = $result ?: [];
+            error_log("Retrieved " . count($result) . " raw devices from Netshot using {$groupQueryParam}");
+            
+            // Cache the raw results
+            $this->devicesCache = $result;
+            $this->cacheTimestamp = time();
             
             // Filter for INPRODUCTION devices if requested
             if ($onlyInProduction) {
@@ -283,7 +353,7 @@ class NetshotAPI {
     }
     
     /**
-     * Get device details by hostname
+     * Get device details by hostname (optimized with indexing)
      * 
      * @param string $hostname The hostname to search for
      * @param bool $validateFormat Whether to validate the hostname format (default true)
@@ -314,81 +384,52 @@ class NetshotAPI {
                 }
             }
             
-            // Convert hostname to uppercase for consistency
-            $hostname = strtoupper($hostname);
+            // Get only INPRODUCTION devices with caching
+            $devices = $this->getDevicesInGroup(null, true, true);
             
-            // Get only INPRODUCTION devices
-            $devices = $this->getDevicesInGroup(null, true);
+            if (empty($devices)) {
+                error_log("No devices available for hostname search: " . $hostname);
+                return null;
+            }
+            
+            // Build index for faster lookups
+            $deviceIndex = $this->buildDeviceIndex($devices);
             
             error_log("Searching " . count($devices) . " Netshot INPRODUCTION devices for hostname: " . $hostname);
             
-            // Log a sample device to see the structure
-            if (!empty($devices)) {
-                $sampleDevice = $devices[0];
-                error_log("Sample Netshot device structure: " . json_encode(array_keys($sampleDevice)));
+            // Try exact match first using index
+            if (isset($deviceIndex['byHostname'][$hostname])) {
+                $device = $deviceIndex['byHostname'][$hostname];
+                error_log("Found exact hostname match in Netshot: " . $device['name']);
                 
-                // Check for IP address fields in the sample device
+                // Log IP address fields found (reduced logging)
                 $ipFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
                 foreach ($ipFields as $field) {
-                    if (isset($sampleDevice[$field])) {
-                        error_log("Found IP field in Netshot data: '$field' with value: " . $sampleDevice[$field]);
+                    if (isset($device[$field]) && !empty($device[$field])) {
+                        error_log("IP field '$field' contains: " . $device[$field]);
+                        break; // Only log the first IP field found
                     }
                 }
+                
+                return $device;
             }
             
-            // First try exact match - handle case conversion to match your Python approach
-            foreach ($devices as $device) {
-                // Try a few different case variations to handle case sensitivity
-                if (isset($device['name']) && 
-                    (strtoupper($device['name']) === $hostname)    // Now hostname is already uppercase
-                   ) {
-                    error_log("Found exact hostname match in Netshot: " . $device['name']);
-                    
-                    // Log all fields in the device
-                    foreach ($device as $key => $value) {
-                        if (!is_array($value)) {
-                            error_log("Device field '$key': " . $value);
-                        } else {
-                            error_log("Device field '$key': [array]");
-                        }
-                    }
-                    
-                    return $device;
-                }
-            }
+            // If exact match failed, try fuzzy matching (only if needed)
+            error_log("No exact match found, trying fuzzy matching for: " . $hostname);
             
-            // If exact match failed, try partial/fuzzy matching
-            // Common scenarios: device name might have prefix/suffix or use different delimiter
-            foreach ($devices as $device) {
-                if (!isset($device['name'])) {
-                    continue;
-                }
-                
-                $deviceName = strtoupper($device['name']);
-                // $hostname is already uppercase from above
-                $searchName = $hostname;
-                
+            foreach ($deviceIndex['byHostname'] as $deviceName => $device) {
                 // Check if one contains the other, or if there's a match after stripping non-alphanumeric chars
                 $cleanDeviceName = preg_replace('/[^A-Z0-9]/', '', $deviceName);
-                $cleanSearchName = preg_replace('/[^A-Z0-9]/', '', $searchName);
+                $cleanSearchName = preg_replace('/[^A-Z0-9]/', '', $hostname);
                 
-                if (strpos($deviceName, $searchName) !== false || 
-                    strpos($searchName, $deviceName) !== false ||
+                if (strpos($deviceName, $hostname) !== false || 
+                    strpos($hostname, $deviceName) !== false ||
                     strpos($cleanDeviceName, $cleanSearchName) !== false ||
                     strpos($cleanSearchName, $cleanDeviceName) !== false) {
                     
                     // Check for CCAP in both names as extra verification
-                    if (strpos($deviceName, 'CCAP') !== false && strpos($searchName, 'CCAP') !== false) {
+                    if (strpos($deviceName, 'CCAP') !== false && strpos($hostname, 'CCAP') !== false) {
                         error_log("Found fuzzy hostname match: " . $device['name'] . " for query: " . $hostname);
-                        
-                        // Check IP field
-                        $ipFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
-                        foreach ($ipFields as $field) {
-                            if (isset($device[$field]) && !empty($device[$field])) {
-                                error_log("IP field '$field' contains: " . $device[$field]);
-                            }
-                        }
-                        
                         return $device;
                     }
                 }
@@ -492,32 +533,42 @@ class NetshotAPI {
     
     public function getDeviceByIP($ipAddress) {
         try {
-            error_log("Fetching devices from Netshot for IP lookup: " . $ipAddress);
+            error_log("Fetching device from Netshot for IP lookup: " . $ipAddress);
             
-            // Get only INPRODUCTION devices
-            $devices = $this->getDevicesInGroup(null, true);
+            // Get only INPRODUCTION devices with caching
+            $devices = $this->getDevicesInGroup(null, true, true);
+            
+            if (empty($devices)) {
+                error_log("No devices available for IP search: " . $ipAddress);
+                return null;
+            }
+            
+            // Build index for faster IP lookups
+            $deviceIndex = $this->buildDeviceIndex($devices);
             
             error_log("Searching " . count($devices) . " INPRODUCTION devices for IP: " . $ipAddress);
             
-            foreach ($devices as $device) {
-                if (isset($device['mgmtIp']) && $device['mgmtIp'] === $ipAddress) {
-                    // Format the response consistently and ensure hostname is uppercase
-                    $result = [
-                        'id' => $device['id'] ?? null,
-                        'name' => strtoupper($device['name'] ?? ''),
-                        'ip' => $device['mgmtIp'] ?? $ipAddress,
-                        'model' => $device['family'] ?? null,
-                        'vendor' => $device['domain'] ?? null,
-                        'status' => $device['status'] ?? null,
-                        'software_version' => $device['softwareVersion'] ?? null,
-                        'last_check' => $device['lastCheck'] ?? null
-                    ];
-                    
-                    return $result;
-                }
+            // Use index for O(1) lookup instead of O(n) iteration
+            if (isset($deviceIndex['byIp'][$ipAddress])) {
+                $device = $deviceIndex['byIp'][$ipAddress];
+                
+                // Format the response consistently and ensure hostname is uppercase
+                $result = [
+                    'id' => $device['id'] ?? null,
+                    'name' => strtoupper($device['name'] ?? ''),
+                    'ip' => $device['mgmtIp'] ?? $ipAddress,
+                    'model' => $device['family'] ?? null,
+                    'vendor' => $device['domain'] ?? null,
+                    'status' => $device['status'] ?? null,
+                    'software_version' => $device['softwareVersion'] ?? null,
+                    'last_check' => $device['lastCheck'] ?? null
+                ];
+                
+                return $result;
             }
             
             // Device not found
+            error_log("No device found with IP: " . $ipAddress);
             return null;
         } catch (Exception $e) {
             error_log("Error in getDeviceByIP: " . $e->getMessage());
@@ -526,27 +577,33 @@ class NetshotAPI {
     }
     
     /**
-     * Get device hostnames by IP address
+     * Get device hostnames by IP address (optimized)
      * 
      * @param string $ipAddress The IP address to search for
      * @return array List of hostnames associated with this IP
      */
     public function getDeviceNamesByIP($ipAddress) {
         try {
-            
             error_log("Looking up hostnames for IP: " . $ipAddress);
             
-            // Get only INPRODUCTION devices
-            $devices = $this->getDevicesInGroup(null, true);
+            // Get only INPRODUCTION devices with caching
+            $devices = $this->getDevicesInGroup(null, true, true);
+            
+            if (empty($devices)) {
+                return [];
+            }
+            
+            // Build index for faster lookups
+            $deviceIndex = $this->buildDeviceIndex($devices);
             
             error_log("Searching " . count($devices) . " INPRODUCTION devices for hostnames with IP: " . $ipAddress);
             $hostnames = [];
             
-            foreach ($devices as $device) {
-                if (isset($device['mgmtIp']) && $device['mgmtIp'] === $ipAddress) {
-                    if (isset($device['name']) && !empty($device['name'])) {
-                        $hostnames[] = strtoupper($device['name']);
-                    }
+            // Use index for faster lookup
+            if (isset($deviceIndex['byIp'][$ipAddress])) {
+                $device = $deviceIndex['byIp'][$ipAddress];
+                if (isset($device['name']) && !empty($device['name'])) {
+                    $hostnames[] = strtoupper($device['name']);
                 }
             }
             
