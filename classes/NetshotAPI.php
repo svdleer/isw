@@ -778,13 +778,13 @@ class NetshotAPI {
             $db = new Database();
             
             // Query for aliases that map to this CCAP name
-            $escapedHostname = str_replace("'", "''", strtolower($ccapHostname)); // Simple SQL escape
-            $sql = "SELECT alias FROM reporting.acc_alias WHERE LOWER(ccap_name) = '$escapedHostname'";
+            $escapedHostname = str_replace("'", "''", $ccapHostname); // Simple SQL escape
+            $sql = "SELECT UPPER(alias) as alias FROM reporting.acc_alias WHERE UPPER(ccap_name) = UPPER('$escapedHostname')";
             error_log("Looking up alias for CCAP hostname: $ccapHostname - Query: $sql");
             
             $result = $db->query($sql);
             if (!empty($result) && isset($result[0]['alias'])) {
-                $aliasHostname = strtoupper($result[0]['alias']); // Return in uppercase for consistency
+                $aliasHostname = $result[0]['alias']; // Already uppercase from query
                 error_log("Found alias hostname: $aliasHostname for CCAP device: $ccapHostname");
                 return $aliasHostname;
             } else {
