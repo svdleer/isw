@@ -540,28 +540,61 @@ class NetshotAPI {
             
             error_log("Searching " . count($devices) . " INPRODUCTION devices with IP pattern: " . $ipPattern . " (regex: " . $regexPattern . ")");
             
-            // Debug: Log a sample of IP addresses to help troubleshoot
+            // Debug: Log available IP fields and sample IP addresses to help troubleshoot
             $sampleIPs = [];
+            $ipFieldsFound = [];
             $count = 0;
             foreach ($devices as $device) {
-                if (isset($device['mgmtIp']) && !empty($device['mgmtIp']) && $count < 10) {
-                    $sampleIPs[] = $device['mgmtIp'];
-                    $count++;
+                // Check what IP fields are actually present
+                $possibleIpFields = ['mgmtAddress', 'mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
+                foreach ($possibleIpFields as $field) {
+                    if (isset($device[$field]) && !empty($device[$field])) {
+                        $ipFieldsFound[$field] = ($ipFieldsFound[$field] ?? 0) + 1;
+                        if ($count < 10) {
+                            $fieldValue = $device[$field];
+                            if (is_array($fieldValue) && isset($fieldValue['ip'])) {
+                                $sampleIPs[] = $field . '=' . $fieldValue['ip'];
+                            } else {
+                                $sampleIPs[] = $field . '=' . $fieldValue;
+                            }
+                            $count++;
+                        }
+                    }
                 }
             }
+            error_log("IP fields found in devices: " . json_encode($ipFieldsFound));
             error_log("Sample IP addresses found in devices: " . implode(', ', $sampleIPs));
             
-            // Filter devices by IP - use array_filter for better performance
+            // Filter devices by IP - first normalize IP fields
             $results = [];
             $matchedCount = 0;
             $checkedCount = 0;
             foreach ($devices as $device) {
-                if (!isset($device['mgmtIp'])) {
+                // Extract IP address from various possible fields (same logic as buildDeviceIndex)
+                $deviceIp = null;
+                $possibleIpFields = ['mgmtIp', 'managementIp', 'ip', 'ipAddress', 'address', 'primaryIp'];
+                
+                // First, try simple fields
+                foreach ($possibleIpFields as $field) {
+                    if (isset($device[$field]) && !empty($device[$field])) {
+                        $deviceIp = $device[$field];
+                        break;
+                    }
+                }
+                
+                // If not found, check nested mgmtAddress structure
+                if (!$deviceIp && isset($device['mgmtAddress'])) {
+                    if (is_array($device['mgmtAddress']) && isset($device['mgmtAddress']['ip'])) {
+                        $deviceIp = $device['mgmtAddress']['ip'];
+                    }
+                }
+                
+                // Skip if no IP found
+                if (!$deviceIp || empty($deviceIp)) {
                     continue;
                 }
                 
                 $checkedCount++;
-                $deviceIp = $device['mgmtIp'];
                 
                 // Debug: Log first few IP checks
                 if ($checkedCount <= 5) {
@@ -597,7 +630,7 @@ class NetshotAPI {
                     $result = [
                         'Id' => $device['id'] ?? null,
                         'Name' => $displayHostname, // Always the CCAP hostname
-                        'IpAddress' => $device['mgmtIp'] ?? '',
+                        'IpAddress' => $deviceIp, // Use the extracted IP
                         'Model' => $device['family'] ?? null,
                         'Vendor' => $device['domain'] ?? null,
                         'Status' => $device['status'] ?? null
